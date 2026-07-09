@@ -2,7 +2,7 @@
 // (written by fleet-register.sh in claude-mac-tweaks). Adds finer state
 // (waiting/done), the task label, diff, and last tool. SPEC §6.1a.
 
-import { readFileSync } from "fs";
+import { readFileSync, readdirSync, unlinkSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
 
@@ -13,6 +13,7 @@ export interface FleetEntry {
   diff?: string;
   lastTool?: string;
   branch?: string;
+  mode?: string; // default | plan | acceptEdits | bypassPermissions
 }
 
 const FLEET_DIR = join(homedir(), ".claude", "fleet");
@@ -27,8 +28,26 @@ export function readFleetEntry(sessionId: string): FleetEntry | undefined {
       diff: j.diff || undefined,
       lastTool: j.last_tool || undefined,
       branch: j.branch || undefined,
+      mode: j.mode || undefined,
     };
   } catch {
     return undefined;
   }
+}
+
+// Remove fleet files whose session is neither live nor in history (SPEC §11).
+export function cleanupStaleFleet(keepIds: Set<string>): number {
+  let removed = 0;
+  try {
+    for (const f of readdirSync(FLEET_DIR)) {
+      if (!f.endsWith(".json")) continue;
+      if (!keepIds.has(f.replace(/\.json$/, ""))) {
+        unlinkSync(join(FLEET_DIR, f));
+        removed++;
+      }
+    }
+  } catch {
+    // nothing to clean
+  }
+  return removed;
 }

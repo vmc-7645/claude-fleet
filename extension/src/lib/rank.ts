@@ -42,6 +42,7 @@ export function loadAgents(): { active: Agent[]; recent: Agent[] } {
       stateReason: state === "waiting" ? fleet?.stateReason : undefined,
       diff: fleet?.diff || undefined,
       lastTool: state === "working" ? fleet?.lastTool : undefined,
+      mode: fleet?.mode || undefined,
       pid: s.pid,
       updatedAt: s.updatedAt || m?.updatedAt || 0,
     };

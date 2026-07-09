@@ -15,6 +15,7 @@ export interface Agent {
   stateReason?: string; // permission tool while waiting
   diff?: string; // git diff --shortstat, when known
   lastTool?: string; // last tool + target while working
+  mode?: string; // permission mode: default | plan | acceptEdits | bypassPermissions
   pid?: number;
   updatedAt: number; // epoch ms
   turns?: number; // recent only

@@ -14,7 +14,7 @@ import {
 } from "@raycast/api";
 import { useEffect, useState } from "react";
 import { searchMyPRs, PR } from "./lib/gh";
-import { reviewPR } from "./lib/claude";
+import { reviewPR, checkoutAndWork, resumeFromPr } from "./lib/claude";
 import { repoPath } from "./lib/repos";
 
 export default function Command() {
@@ -46,14 +46,14 @@ export default function Command() {
 function PRItem({ pr }: { pr: PR }) {
   const local = repoPath(pr.repo);
 
-  async function doReview() {
+  async function withLocal(fn: (path: string) => Promise<void>, hud: string) {
     if (!local) {
       await showToast({ style: Toast.Style.Failure, title: "Repo not cloned locally", message: pr.repo });
       return;
     }
     try {
-      await reviewPR(local, pr.number);
-      await showHUD(`Reviewing ${pr.repo}#${pr.number}`);
+      await fn(local);
+      await showHUD(hud);
       await closeMainWindow();
     } catch (e) {
       await showToast({ style: Toast.Style.Failure, title: "Failed", message: String(e) });
@@ -71,7 +71,23 @@ function PRItem({ pr }: { pr: PR }) {
       accessories={accessories}
       actions={
         <ActionPanel>
-          <Action title="Review in Claude" icon={Icon.MagnifyingGlass} onAction={doReview} />
+          <Action
+            title="Review in Claude"
+            icon={Icon.MagnifyingGlass}
+            onAction={() => withLocal((p) => reviewPR(p, pr.number), `Reviewing ${pr.repo}#${pr.number}`)}
+          />
+          <Action
+            title="Check Out & Work"
+            icon={Icon.Hammer}
+            onAction={() =>
+              withLocal((p) => checkoutAndWork(p, pr.repo, pr.number, pr.title), `Checking out ${pr.repo}#${pr.number}`)
+            }
+          />
+          <Action
+            title="Resume PR Agent"
+            icon={Icon.Terminal}
+            onAction={() => withLocal((p) => resumeFromPr(p, pr.number), `Resuming ${pr.repo}#${pr.number}`)}
+          />
           <Action.OpenInBrowser url={pr.url} />
           <Action.CopyToClipboard title="Copy PR URL" content={pr.url} />
         </ActionPanel>

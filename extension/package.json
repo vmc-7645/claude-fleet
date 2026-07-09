@@ -36,8 +36,23 @@
       "mode": "view"
     },
     {
+      "name": "my-issues",
+      "title": "My Issues",
+      "subtitle": "Claude Code",
+      "description": "Your open issues across repos; start an agent on one.",
+      "mode": "view"
+    },
+    {
+      "name": "worktrees",
+      "title": "Worktrees",
+      "subtitle": "Claude Code",
+      "description": "List git worktrees across your repos; open, resume, or remove.",
+      "mode": "view"
+    },
+    {
       "name": "fleet-menu-bar",
       "title": "Claude Code Fleet",
+      "subtitle": "Claude Code",
       "description": "Menu-bar indicator of Claude agents needing you.",
       "mode": "menu-bar",
       "interval": "1m"

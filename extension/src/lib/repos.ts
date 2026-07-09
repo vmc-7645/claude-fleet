@@ -1,6 +1,6 @@
 // Discover local repos, reusing the shell tweaks' config
-// (~/.config/claude-mac-tweaks/repos.env: REPO_ROOT + DEFAULT_REPO). This is the
-// dynamic version of the shell dropdowns (SPEC §7).
+// (~/.config/claude-mac-tweaks/repos.env: REPO_ROOT + DEFAULT_REPO). An optional
+// override (from the extension preference) wins over the config. SPEC §7.
 
 import { existsSync, readFileSync, readdirSync } from "fs";
 import { homedir } from "os";
@@ -11,25 +11,30 @@ export interface Repo {
   path: string;
 }
 
-export function reposConfig(): { root: string; defaultRepo?: string } {
+function expand(p: string): string {
+  return p.replace(/^~(?=$|\/)/, homedir());
+}
+
+export function reposConfig(overrideRoot?: string): { root: string; defaultRepo?: string } {
   const cfg = join(homedir(), ".config", "claude-mac-tweaks", "repos.env");
   let root = join(homedir(), "Repos");
   let defaultRepo: string | undefined;
   try {
     for (const line of readFileSync(cfg, "utf8").split("\n")) {
       const r = line.match(/^REPO_ROOT="?([^"]*)"?/);
-      if (r) root = r[1].replace(/^~/, homedir());
+      if (r) root = expand(r[1]);
       const d = line.match(/^DEFAULT_REPO="?([^"]*)"?/);
       if (d && d[1]) defaultRepo = d[1];
     }
   } catch {
     // defaults
   }
+  if (overrideRoot && overrideRoot.trim()) root = expand(overrideRoot.trim());
   return { root, defaultRepo };
 }
 
-export function listRepos(): Repo[] {
-  const { root } = reposConfig();
+export function listRepos(overrideRoot?: string): Repo[] {
+  const { root } = reposConfig(overrideRoot);
   let entries: string[];
   try {
     entries = readdirSync(root);
@@ -46,9 +51,8 @@ export function listRepos(): Repo[] {
   return out;
 }
 
-// Resolve a repo name (or owner/repo) to a local path under the root, if cloned.
-export function repoPath(nameOrOwnerRepo: string): string | undefined {
-  const { root } = reposConfig();
+export function repoPath(nameOrOwnerRepo: string, overrideRoot?: string): string | undefined {
+  const { root } = reposConfig(overrideRoot);
   const name = nameOrOwnerRepo.includes("/") ? nameOrOwnerRepo.split("/").pop()! : nameOrOwnerRepo;
   const p = join(root, name);
   return existsSync(join(p, ".git")) ? p : undefined;
