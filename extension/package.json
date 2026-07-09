@@ -34,6 +34,14 @@
       "subtitle": "Claude Code",
       "description": "Open Claude to review a PR in a chosen repo.",
       "mode": "view"
+    },
+    {
+      "name": "fleet-menu-bar",
+      "title": "Fleet",
+      "subtitle": "Claude Code",
+      "description": "Menu-bar indicator of Claude agents needing you.",
+      "mode": "menu-bar",
+      "interval": "1m"
     }
   ],
   "dependencies": {

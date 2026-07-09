@@ -326,6 +326,10 @@ this repo consumes them.
 - **M3** — **Fleet** menu bar.
 - **M4** — `question` (transcript parse, graceful), diff Detail, Delete (careful,
   §16.3), `--from-pr` linkage, Undo, Stop (best-effort).
+  **Requested:** (a) show each agent's **mode** (auto / plan / default) — capture
+  `permission_mode` from the hook payload into the fleet registry, render as a row
+  accessory; (b) **My PRs → "Check out & work"** — `gh pr checkout` into a fresh
+  worktree + spawn an agent (already scoped in §5.2).
 - **M5** — My Issues, Worktrees, full Preferences, GC.
 
 ## 18. Decisions (resolved defaults)
