@@ -18,3 +18,6 @@ build/
 .vscode/
 .idea/
 *.swp
+
+# Raycast generated
+extension/raycast-env.d.ts

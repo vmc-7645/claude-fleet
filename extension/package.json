@@ -1,0 +1,36 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "claude-code-for-raycast",
+  "title": "Claude Code",
+  "description": "See and resume your Claude Code agents, and review PRs — from Raycast.",
+  "icon": "icon.png",
+  "author": "vmc-7645",
+  "license": "MIT",
+  "commands": [
+    {
+      "name": "agents",
+      "title": "Agents",
+      "subtitle": "Claude Code",
+      "description": "See active and recent Claude agents; resume, fork, or jump to them.",
+      "mode": "view"
+    }
+  ],
+  "dependencies": {
+    "@raycast/api": "^1.80.0",
+    "@raycast/utils": "^1.17.0"
+  },
+  "devDependencies": {
+    "@raycast/eslint-config": "^1.0.11",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.10",
+    "eslint": "^8.57.0",
+    "prettier": "^3.3.3",
+    "typescript": "^5.5.4"
+  },
+  "scripts": {
+    "build": "ray build -e dist",
+    "dev": "ray develop",
+    "lint": "ray lint",
+    "fix-lint": "ray lint --fix"
+  }
+}
