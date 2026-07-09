@@ -38,11 +38,11 @@ Every dev surface has a one-keystroke "hand it to an agent" action:
 | **Worktrees** | Open / resume / remove worktrees | Later |
 
 ## Milestone status
-- [ ] **M1** — Agents console on Claude's `~/.claude/sessions/` + `projects/` (resume/fork/jump) — *no hook dependency; start here*
-- [ ] **M2** — My PRs + Review in Claude + Review PR + Spawn Agent (+ `claude-open-tab`)
-- [ ] **M0′** — enrich `fleet-register.sh` (waiting/done state, task, diff) *(in [claude-mac-tweaks](https://github.com/vmc-7645/claude-mac-tweaks); refines the Agents UI)*
+- [x] **M1** — Agents console on Claude's `~/.claude/sessions/` + `projects/` (resume/fork/jump)
+- [x] **M2** — My PRs (→ Review in Claude) + Review PR + Spawn Agent
+- [x] **M0′** — enriched `fleet-register.sh` (waiting/done state, task, diff, last tool) *(in [claude-mac-tweaks](https://github.com/vmc-7645/claude-mac-tweaks); Agents joins it)*
 - [ ] **M3** — Fleet menu bar
-- [ ] **M4** — pending-question, diff detail, delete (careful), `--from-pr`, undo, stop
+- [ ] **M4** — pending-question, diff detail, delete (careful), `--from-pr`, undo, stop, PR CI status
 - [ ] **M5** — My Issues, Worktrees, full preferences, GC
 
 ## Dependencies
