@@ -13,6 +13,27 @@
       "subtitle": "Claude Code",
       "description": "See active and recent Claude agents; resume, fork, or jump to them.",
       "mode": "view"
+    },
+    {
+      "name": "my-prs",
+      "title": "My PRs",
+      "subtitle": "Claude Code",
+      "description": "Your open PRs across repos; review any of them in Claude.",
+      "mode": "view"
+    },
+    {
+      "name": "spawn",
+      "title": "Spawn Agent",
+      "subtitle": "Claude Code",
+      "description": "Spawn a Claude agent in a fresh worktree from a task.",
+      "mode": "view"
+    },
+    {
+      "name": "review-pr",
+      "title": "Review PR",
+      "subtitle": "Claude Code",
+      "description": "Open Claude to review a PR in a chosen repo.",
+      "mode": "view"
     }
   ],
   "dependencies": {

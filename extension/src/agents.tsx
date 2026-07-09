@@ -1,12 +1,12 @@
-// Agents — the console. Merges Claude's live session registry (Active) with
-// transcript history (Recent). Each row obeys the `→ Claude` primitive:
-// resume / fork / jump. SPEC §5.1.
+// Agents — the console. Active (Claude's live registry, refined by the fleet
+// hook) + Recent (transcript history). Each row obeys `→ Claude`. SPEC §5.1.
 
 import {
   List,
   ActionPanel,
   Action,
   Icon,
+  Color,
   showToast,
   Toast,
   showHUD,
@@ -15,7 +15,7 @@ import {
 } from "@raycast/api";
 import { useEffect, useState } from "react";
 import { loadAgents } from "./lib/rank";
-import { Agent } from "./lib/types";
+import { Agent, AgentState } from "./lib/types";
 import { resumeAgent, forkAgent, jumpToGhostty } from "./lib/claude";
 
 function timeAgo(ms: number): string {
@@ -31,7 +31,20 @@ function timeAgo(ms: number): string {
 
 function agentIcon(a: Agent): string {
   if (!a.live) return "🕘";
-  return a.state === "working" ? "⚙️" : "✅";
+  switch (a.state) {
+    case "working":
+      return "⚙️";
+    case "waiting":
+      return "🔔";
+    case "done":
+      return "✅";
+    default:
+      return "💤";
+  }
+}
+
+function stateWord(s: AgentState): string {
+  return s;
 }
 
 export default function Command() {
@@ -61,9 +74,7 @@ export default function Command() {
 
   return (
     <List isLoading={isLoading} searchBarPlaceholder="Search agents by repo or title…">
-      {empty && (
-        <List.EmptyView icon="🤖" title="No Claude agents" description="Start one and it'll appear here." />
-      )}
+      {empty && <List.EmptyView icon="🤖" title="No Claude agents" description="Start one and it'll appear here." />}
       <List.Section title={`Active (${active.length})`}>
         {active.map((a) => (
           <AgentItem key={a.sessionId} agent={a} onRefresh={refresh} />
@@ -79,11 +90,21 @@ export default function Command() {
 }
 
 function AgentItem({ agent, onRefresh }: { agent: Agent; onRefresh: () => void }) {
-  const age = agent.live
-    ? `${agent.state === "working" ? "working" : "idle"} ${timeAgo(agent.updatedAt)}`
-    : `${timeAgo(agent.updatedAt)}${agent.turns ? ` · ${agent.turns} turns` : ""}`;
+  const ageLabel = agent.live
+    ? `${stateWord(agent.state)} · ${timeAgo(agent.updatedAt)}`
+    : `${timeAgo(agent.updatedAt)}${agent.turns ? ` · ${agent.turns}t` : ""}`;
 
-  async function run(fn: () => Promise<void>, hud: string) {
+  const accessories: List.Item.Accessory[] = [];
+  if (agent.state === "waiting" && agent.stateReason) {
+    accessories.push({ tag: { value: agent.stateReason, color: Color.Orange } });
+  } else if (agent.state === "working" && agent.lastTool) {
+    accessories.push({ text: agent.lastTool });
+  } else if (agent.diff) {
+    accessories.push({ text: agent.diff });
+  }
+  accessories.push({ text: ageLabel });
+
+  async function act(fn: () => Promise<void>, hud: string) {
     try {
       await fn();
       await showHUD(hud);
@@ -98,16 +119,16 @@ function AgentItem({ agent, onRefresh }: { agent: Agent; onRefresh: () => void }
       icon={agentIcon(agent)}
       title={agent.repo}
       subtitle={agent.title}
-      accessories={[{ text: age }]}
+      accessories={accessories}
       actions={
         <ActionPanel>
           {agent.live ? (
             <>
-              <Action title="Jump to Ghostty" icon={Icon.Window} onAction={() => run(jumpToGhostty, "Raised Ghostty")} />
+              <Action title="Jump to Ghostty" icon={Icon.Window} onAction={() => act(jumpToGhostty, "Raised Ghostty")} />
               <Action
                 title="Resume in New Tab"
                 icon={Icon.Terminal}
-                onAction={() => run(() => resumeAgent(agent), `Resuming ${agent.repo}`)}
+                onAction={() => act(() => resumeAgent(agent), `Resuming ${agent.repo}`)}
               />
             </>
           ) : (
@@ -115,12 +136,12 @@ function AgentItem({ agent, onRefresh }: { agent: Agent; onRefresh: () => void }
               <Action
                 title="Resume in New Tab"
                 icon={Icon.Terminal}
-                onAction={() => run(() => resumeAgent(agent), `Resuming ${agent.repo}`)}
+                onAction={() => act(() => resumeAgent(agent), `Resuming ${agent.repo}`)}
               />
               <Action
                 title="Fork Session"
                 icon={Icon.Duplicate}
-                onAction={() => run(() => forkAgent(agent), `Forking ${agent.repo}`)}
+                onAction={() => act(() => forkAgent(agent), `Forking ${agent.repo}`)}
               />
             </>
           )}

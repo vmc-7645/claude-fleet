@@ -1,10 +1,12 @@
 // Merge Claude's live session registry (active) with transcript history
-// (recent), dedup by sessionId, and sort each group by recency. SPEC §6.3.
+// (recent), refine active state with the fleet hook, dedup by sessionId, and
+// sort each group by recency. SPEC §6.3.
 
 import { basename } from "path";
-import { Agent } from "./types";
+import { Agent, AgentState } from "./types";
 import { readActiveSessions } from "./sessions";
 import { readTranscripts } from "./history";
+import { readFleetEntry } from "./fleet";
 
 function repoOf(cwd: string): string {
   return basename(cwd || "") || "?";
@@ -17,13 +19,29 @@ export function loadAgents(): { active: Agent[]; recent: Agent[] } {
 
   const active: Agent[] = sessions.map((s) => {
     const m = metas.get(s.sessionId);
+    const fleet = readFleetEntry(s.sessionId);
+
+    // Claude's busy = actively working. When Claude is idle, the fleet hook (if
+    // present) says which kind of idle: waiting-on-permission / done / idle.
+    let state: AgentState;
+    if (s.status === "busy") {
+      state = "working";
+    } else if (fleet?.state === "waiting" || fleet?.state === "done" || fleet?.state === "idle") {
+      state = fleet.state;
+    } else {
+      state = "idle";
+    }
+
     return {
       sessionId: s.sessionId,
       cwd: s.cwd,
       repo: repoOf(s.cwd),
-      title: m?.title || s.name || repoOf(s.cwd),
+      title: fleet?.task || m?.title || s.name || repoOf(s.cwd),
       live: true,
-      state: s.status === "busy" ? "working" : "idle",
+      state,
+      stateReason: state === "waiting" ? fleet?.stateReason : undefined,
+      diff: fleet?.diff || undefined,
+      lastTool: state === "working" ? fleet?.lastTool : undefined,
       pid: s.pid,
       updatedAt: s.updatedAt || m?.updatedAt || 0,
     };
@@ -32,7 +50,7 @@ export function loadAgents(): { active: Agent[]; recent: Agent[] } {
   const recent: Agent[] = [];
   for (const m of metas.values()) {
     if (activeIds.has(m.sessionId)) continue;
-    if (!m.cwd) continue; // skip transcripts we couldn't read a cwd from
+    if (!m.cwd) continue;
     recent.push({
       sessionId: m.sessionId,
       cwd: m.cwd,
