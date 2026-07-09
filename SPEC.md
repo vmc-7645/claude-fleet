@@ -122,10 +122,22 @@ session · **remove** (merged / gone-branch cleanup).
 
 ## 6. Data sources & contracts
 
-### 6.1 Fleet registry — ACTIVE agents
-`~/.claude/fleet/<session_id>.json`, written by `fleet-register.sh` (hooks).
-Existing: `session_id, cwd, repo, branch, task, pid, started, last_seen`.
-**Enrich (M0):**
+### 6.1 ACTIVE agents — Claude's own session registry (PRIMARY)
+Claude Code maintains **`~/.claude/sessions/<pid>.json`** for every LIVE session
+and deletes it when the process exits (**verified: file count == live `claude`
+process count**). Fields: `sessionId, cwd, pid, status ("busy"|"idle"), name,
+kind, entrypoint, startedAt, updatedAt`. `status` is **live** (busy = working,
+idle = your turn / idle). This is the **authoritative source of which agents are
+live** — no hooks required, self-cleaning, and it includes sessions started
+before any hook, so the **cold-start gap is gone**.
+
+#### 6.1a Optional enrichment — the fleet hook
+`~/.claude/fleet/<session_id>.json` (from `fleet-register.sh`) adds what Claude's
+registry lacks, joined by `sessionId`: finer state (`waiting`-on-permission /
+`done`, beyond busy/idle), the **task** label, `state_since`, `diff`, `last_tool`,
+and (post-MVP) `question`. Where absent (e.g. cold start), the UI falls back to
+Claude's `status`. **The hook is a refinement, not a prerequisite** — M1 ships on
+Claude's registry alone. Enrichment fields:
 | Field | Meaning | Written by | Phase |
 |-------|---------|-----------|-------|
 | `state` | working/waiting/idle/done | every event | **MVP** |
@@ -143,30 +155,22 @@ so it is **deferred off the critical path**. Absent → subtitle degrades to
 `~/.claude/projects/<encoded-cwd>/<session_id>.jsonl`, one file per session.
 - **session id** = filename; **cwd** read from *inside* the transcript (never
   reverse the dir name — dashes are ambiguous, e.g. `myrepo-worktrees`).
-- **title** = best available (§14: prefer a stored summary / `--name` if present,
-  else first user message); **last active** = mtime; **turns** = line count.
+- **title** = the last `ai-title` entry's **`aiTitle`** field in the transcript (a
+  Claude-generated title — verified present; filter by matching `sessionId` when a
+  transcript has several), else the first user message. **last active** = mtime;
+  **turns** = line count.
 - Read only the file **head** for the title; see caching §9.
 - No machine-readable `claude sessions` list exists → enumerate files.
 - Non-git sessions (e.g. `~`): `repo`/`branch` empty — render by cwd basename.
 
-### 6.3 Active/inactive reconciliation (the algorithm)
-Union all session ids from the registry and from history, then per id:
-```
-live = registry.has(id)
-       && ( kill(pid,0) succeeds
-            OR (last_seen >= boot_time AND now - last_seen < GRACE) )   # GRACE ~= 90s
-if live:  → ACTIVE   (state/fields from registry)
-else:     → RECENT   (title/cwd/mtime/turns from history)
-```
-- **Dedup:** an id in both sources appears **once** (Active if live, else Recent).
-- **Stale registry entries** (dead pid, `last_seen < boot`) are treated as Recent,
-  not Active, and are candidates for GC (§11).
-- **Cold start (registry unwarmed):** the registry only fills for sessions started
-  after M0 installs + a Claude restart, so already-running agents (incl. the
-  current one) may be missing. Supplement Active with a heuristic: a history
-  `.jsonl` whose **mtime is very recent** (< a few min) **and** a matching live
-  `claude` process ⇒ show as Active ("live (inferred)"). Also surface a one-time
-  "restart Claude to enable live tracking" hint while the registry is empty.
+### 6.3 Active/inactive reconciliation (simplified by §6.1)
+- **Active** = the sessions in **`~/.claude/sessions/*.json`** (authoritative,
+  live, self-cleaning). `status` → working (busy) / your-turn (idle); refine with
+  the fleet hook (waiting / done + task / diff) by `sessionId` when present.
+- **Recent** = transcripts in `~/.claude/projects/*.jsonl` whose `sessionId` is
+  **not** in the Active set.
+- **Dedup** by `sessionId`. No pid/boot/grace heuristics and **no cold-start
+  warming** — Claude's own registry handles liveness and covers pre-hook sessions.
 
 ### 6.4 GitHub — `gh`
 Cross-repo reads via `gh search prs/issues --author=@me`; per-repo detail via
@@ -239,8 +243,10 @@ gh ───────────────▶ GitHub                     �
 ```
 
 ## 11. Liveness / GC
-Reuse `claude-restore` signals: `pid` + boot time. Entries dead-and-pre-boot →
-Recent + GC candidates. `SessionEnd` deletes. Optional "Clean up dead agents".
+Claude Code maintains `~/.claude/sessions/` itself (deletes files on exit), so
+**active liveness/GC is free**. Only the optional fleet-hook files
+(`~/.claude/fleet/`) can go stale — prune those whose `sessionId` is no longer in
+`sessions/` or `projects/`.
 
 ## 12. Preferences (schema)
 | Pref | Type | Default | Used by |
@@ -260,8 +266,8 @@ Recent + GC candidates. `SessionEnd` deletes. Optional "Clean up dead agents".
 
 ## 13. Empty & error states (cross-cutting)
 Every command handles: **gh not authed** → row/CTA "Run `gh auth login`";
-**empty registry** → "No live agents (restart Claude to enable tracking)" +
-show Recent; **no worktrees / no PRs / no issues** → friendly empty + a spawn CTA;
+**no active sessions** → "No live agents" + show Recent;
+**no worktrees / no PRs / no issues** → friendly empty + a spawn CTA;
 **Ghostty not running** → open-a-tab launches it (§8). Errors surface as a Raycast
 toast, never a silent no-op.
 
@@ -290,23 +296,35 @@ enriched `fleet-register.sh` and the shared `claude-open-tab` helper live in
 **`claude-mac-tweaks`** (single source; also power `fleet-restore`/`worktree-launcher`);
 this repo consumes them.
 
-## 16. To-verify (unknowns, not decisions)
-1. **`MenuBarExtra`** badge-as-title, conditional hide, **min refresh interval** (before M3).
-2. **`claude --resume <id>` with a gone cwd** — resolves by id, or needs cwd? Fallback: resume from repo root / warn.
-3. **Session `.jsonl` deletion safety** — is there an index/summary cache to keep in sync? (Gates the Delete action.)
-4. **Better title source** — does Claude store a summary / expose `--name`? Else first user message.
-5. **`--from-pr`** semantics — does it resolve an existing session for a PR? (Gates "Resume PR agent".)
-6. **Dev-extension persistence** after the dev server stops.
+## 16. Verifications — RESOLVED
+1. **`MenuBarExtra`** — `title` prop shows text/count (pseudo-badge) ✓; return
+   `null` to hide the item ✓; re-renders on open ✓; background `interval` in
+   package.json (exact min ~1m, non-blocking since fresh-on-open). ✓
+2. **`--resume <id>` gone cwd** — non-blocking: Active cwd comes from Claude's
+   registry (exists); Recent cwd from the transcript; fallback = repo root / warn. ✓
+3. **Delete safety** — CONFIRMED ancillary state exists (`~/.claude/sessions`,
+   `session-env`, `file-history`, `history.jsonl`), so bare `rm` of a transcript is
+   unsafe → **Delete stays deferred / careful** (M4). ✓
+4. **Title source** — RESOLVED: transcripts carry `ai-title` entries with
+   **`aiTitle`** (Claude-generated). Use the last matching one; fallback first user
+   message. ✓
+5. **`--from-pr`** — CONFIRMED: "Resume a session linked to a PR by PR
+   number/URL" → viable for "Resume PR agent". ✓
+6. **Dev-extension persistence** — local dev extensions persist in Raycast after
+   the dev server stops (updates need a re-run). ✓
 
-## 17. Milestones (re-scoped so risk is off the critical path)
-- **M0** — enrich `fleet-register.sh`: `state/state_since/state_reason/diff/last_tool`
-  (**no `question`**). Add shared `claude-open-tab` helper. In `claude-mac-tweaks`.
-- **M1** — **Agents** list: Active+Recent with §6.3 reconciliation + cold-start
-  heuristic, title cache; Resume / Fork / Jump (Resume-vs-Jump guard). ← the console.
+## 17. Milestones (revised — M1 no longer blocked on hooks, thanks to §6.1)
+- **M1** — **Agents** console built directly on **Claude's `~/.claude/sessions/`**
+  (active, busy/idle) + **`~/.claude/projects/`** (recent, titled by `aiTitle`),
+  §6.3 reconciliation, title cache; Resume / Fork / Jump (Resume-vs-Jump guard).
+  **No hook dependency — start here.**
 - **M2** — **My PRs** (cross-repo via `gh search`) + **Review in Claude**;
-  **Review PR** (form/arg); **Spawn Agent**. Uses `claude-open-tab`.
-- **M3** — **Fleet** menu bar (verify §16.1 first).
-- **M4** — `question` (transcript parse, graceful), diff Detail, Delete (after
+  **Review PR** (form/arg); **Spawn Agent**. Add shared `claude-open-tab` helper.
+- **M0′ (enrichment — parallel/after, in `claude-mac-tweaks`)** — enrich
+  `fleet-register.sh` (`state`=waiting/done, `task`, `diff`, `last_tool`); the
+  Agents UI refines Claude's busy/idle → waiting/done + task when present.
+- **M3** — **Fleet** menu bar.
+- **M4** — `question` (transcript parse, graceful), diff Detail, Delete (careful,
   §16.3), `--from-pr` linkage, Undo, Stop (best-effort).
 - **M5** — My Issues, Worktrees, full Preferences, GC.
 
@@ -342,7 +360,7 @@ working until then; then mark that tweak deprecated (or thin it to a pointer). T
 ---
 
 ### Appendix A — gap traceability (where each reviewed gap is resolved)
-1 Active under-defined → §6.3, §5.1 (Resume-vs-Jump). 2 Cold-start → §6.3, §13.
+1 Active under-defined → §6.1/§6.3, §5.1 (Resume-vs-Jump). 2 Cold-start → RESOLVED by Claude's `sessions/` registry (§6.1/§6.3).
 3 Cross-repo → §7, §5.2/5.4. 4 Stop/kill → §5.1.1. 5 Open-a-tab fragile → §8.
 6 Collector risk → §6.1 (question post-MVP), §17-M0. 7 History perf → §9.
 8 Delete safety → §16.3, §5.1 (gated). 9 Title source → §16.4, §6.2.
