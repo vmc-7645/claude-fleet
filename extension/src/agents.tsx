@@ -20,6 +20,7 @@ import {
 import { useEffect, useState } from "react";
 import { loadAgents } from "./lib/rank";
 import { cleanupStaleFleet } from "./lib/fleet";
+import { deleteTranscript } from "./lib/history";
 import { prefs } from "./lib/prefs";
 import { Agent, AgentState } from "./lib/types";
 import {
@@ -313,6 +314,21 @@ function AgentItem(props: {
                 title="Fork Session"
                 icon={Icon.Duplicate}
                 onAction={() => act(() => forkAgent(agent), `Forking ${agent.repo}`)}
+              />
+              <Action
+                title="Delete Session"
+                icon={Icon.Trash}
+                style={Action.Style.Destructive}
+                onAction={async () => {
+                  const ok = await confirmAlert({
+                    title: `Delete ${agent.repo} session?`,
+                    message: "Removes the transcript file (can't be undone).",
+                    primaryAction: { title: "Delete", style: Alert.ActionStyle.Destructive },
+                  });
+                  if (!ok) return;
+                  deleteTranscript(agent.sessionId);
+                  onRefresh();
+                }}
               />
             </>
           )}

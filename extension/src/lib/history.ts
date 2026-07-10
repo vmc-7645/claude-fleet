@@ -4,7 +4,7 @@
 // turn count. Parsed metadata is cached by file mtime so unchanged transcripts
 // aren't re-read (SPEC §6.2, §9).
 
-import { readdirSync, readFileSync, statSync } from "fs";
+import { existsSync, readdirSync, readFileSync, statSync, unlinkSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
 
@@ -15,6 +15,11 @@ export interface TranscriptMeta {
   updatedAt: number; // mtime ms
   turns: number;
   lastMessage: string; // last assistant text (the "pending question")
+  model: string; // last model seen
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
 }
 
 const PROJECTS_DIR = join(homedir(), ".claude", "projects");
@@ -35,16 +40,27 @@ function assistantText(content: unknown): string {
   return "";
 }
 
+const EMPTY = (sessionId: string): TranscriptMeta => ({
+  sessionId,
+  cwd: "",
+  title: "",
+  updatedAt: 0,
+  turns: 0,
+  lastMessage: "",
+  model: "",
+  inputTokens: 0,
+  outputTokens: 0,
+  cacheReadTokens: 0,
+  cacheWriteTokens: 0,
+});
+
 function parseTranscript(path: string, sessionId: string): TranscriptMeta {
-  let cwd = "";
-  let title = "";
-  let turns = 0;
-  let lastMessage = "";
+  const meta = EMPTY(sessionId);
   let content = "";
   try {
     content = readFileSync(path, "utf8");
   } catch {
-    return { sessionId, cwd, title, updatedAt: 0, turns: 0, lastMessage: "" };
+    return meta;
   }
   for (const line of content.split("\n")) {
     if (!line) continue;
@@ -54,18 +70,54 @@ function parseTranscript(path: string, sessionId: string): TranscriptMeta {
     } catch {
       continue;
     }
-    if (!cwd && typeof row.cwd === "string") cwd = row.cwd;
-    if (row.type === "user") turns++;
+    if (!meta.cwd && typeof row.cwd === "string") meta.cwd = row.cwd;
+    if (row.type === "user") meta.turns++;
     if (row.type === "ai-title" && typeof row.aiTitle === "string") {
-      if (row.sessionId === sessionId || !title) title = row.aiTitle;
+      if (row.sessionId === sessionId || !meta.title) meta.title = row.aiTitle;
     }
     if (row.type === "assistant") {
-      const msg = row.message as { content?: unknown } | undefined;
-      const t = msg ? assistantText(msg.content) : "";
-      if (t) lastMessage = t.slice(0, 1200);
+      const msg = row.message as { content?: unknown; model?: string; usage?: Record<string, number> } | undefined;
+      if (msg) {
+        const t = assistantText(msg.content);
+        if (t) meta.lastMessage = t.slice(0, 1200);
+        if (typeof msg.model === "string") meta.model = msg.model;
+        const u = msg.usage;
+        if (u) {
+          meta.inputTokens += u.input_tokens || 0;
+          meta.outputTokens += u.output_tokens || 0;
+          meta.cacheReadTokens += u.cache_read_input_tokens || 0;
+          meta.cacheWriteTokens += u.cache_creation_input_tokens || 0;
+        }
+      }
     }
   }
-  return { sessionId, cwd, title, updatedAt: 0, turns, lastMessage };
+  return meta;
+}
+
+export function findTranscriptPath(sessionId: string): string | null {
+  let dirs: string[];
+  try {
+    dirs = readdirSync(PROJECTS_DIR);
+  } catch {
+    return null;
+  }
+  for (const d of dirs) {
+    const p = join(PROJECTS_DIR, d, `${sessionId}.jsonl`);
+    if (existsSync(p)) return p;
+  }
+  return null;
+}
+
+export function deleteTranscript(sessionId: string): boolean {
+  const p = findTranscriptPath(sessionId);
+  if (!p) return false;
+  try {
+    unlinkSync(p);
+    cache.delete(p);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function readTranscripts(): Map<string, TranscriptMeta> {

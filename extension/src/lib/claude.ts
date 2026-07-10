@@ -3,6 +3,7 @@
 // AppleScript in claude-worktree/claude-restore (SPEC §8).
 
 import { runAppleScript } from "@raycast/utils";
+import { homedir } from "os";
 import { Agent } from "./types";
 import { run } from "./exec";
 import { agentMatchesTab } from "./tabmatch";
@@ -150,6 +151,21 @@ export function resumeCommand(agent: Agent): string {
 // Open a folder in the configured editor (e.g. `code <path>`).
 export async function openInEditor(path: string, editorCmd: string): Promise<void> {
   await run(editorCmd, [path]);
+}
+
+// Start a fresh Claude session in a repo (no worktree).
+export async function newSessionInRepo(repoPath: string): Promise<void> {
+  await openInGhosttyTab(repoPath, "claude");
+}
+
+// Open Claude's /mcp UI to (re)authenticate MCP servers.
+export async function openMcpAuth(): Promise<void> {
+  await openInGhosttyTab(homedir(), `claude ${shq("/mcp")}`);
+}
+
+// Run `claude doctor` in a tab.
+export async function runDoctor(): Promise<void> {
+  await openInGhosttyTab(homedir(), "claude doctor");
 }
 
 // Open the most-recent session for a directory in a new tab.

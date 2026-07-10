@@ -98,6 +98,58 @@
       "mode": "view"
     },
     {
+      "name": "mcp",
+      "title": "MCP Servers",
+      "subtitle": "Claude Code",
+      "description": "List MCP servers + auth status; re-authenticate.",
+      "mode": "view"
+    },
+    {
+      "name": "skills",
+      "title": "Skills",
+      "subtitle": "Claude Code",
+      "description": "Manage your custom slash-command skills.",
+      "mode": "view"
+    },
+    {
+      "name": "usage",
+      "title": "Usage",
+      "subtitle": "Claude Code",
+      "description": "Estimated tokens & cost per session.",
+      "mode": "view"
+    },
+    {
+      "name": "claude-config",
+      "title": "Claude Code Config",
+      "subtitle": "Claude Code",
+      "description": "Edit settings/CLAUDE.md, view hooks/plugins, set model, doctor, version.",
+      "mode": "view"
+    },
+    {
+      "name": "new-session",
+      "title": "New Session",
+      "subtitle": "Claude Code",
+      "description": "Start a fresh Claude session in a repo (no worktree).",
+      "mode": "no-view",
+      "arguments": [
+        {
+          "name": "repo",
+          "type": "dropdown",
+          "placeholder": "repo",
+          "data": [
+            { "title": "myrepo", "value": "myrepo" },
+            { "title": "claude-code-for-raycast", "value": "claude-code-for-raycast" },
+            { "title": "claude-mac-tweaks", "value": "claude-mac-tweaks" },
+            { "title": "example-repo-2", "value": "example-repo-2" },
+            { "title": "example-repo-3", "value": "example-repo-3" },
+            { "title": "example-repo-4", "value": "example-repo-4" },
+            { "title": "example-repo-5", "value": "example-repo-5" },
+            { "title": "example-repo-6", "value": "example-repo-6" }
+          ]
+        }
+      ]
+    },
+    {
       "name": "fleet-menu-bar",
       "title": "Claude Code Fleet",
       "subtitle": "Claude Code",
