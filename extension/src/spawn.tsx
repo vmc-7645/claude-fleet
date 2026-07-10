@@ -32,13 +32,12 @@ export default function Command() {
     }
     const branch = branchIn || `agent/${slug(task || "task")}`;
     setLoading(true);
+    await closeMainWindow();
     try {
       await spawnAgent(repo.path, branch, task || undefined);
       await showHUD(`Spawned ${repo.name}:${branch}`);
-      await closeMainWindow();
-      await popToRoot();
     } catch (e) {
-      await showToast({ style: Toast.Style.Failure, title: "Spawn failed", message: String(e) });
+      await showHUD(`❌ ${String(e).slice(0, 80)}`);
       setLoading(false);
     }
   }

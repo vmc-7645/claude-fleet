@@ -1,7 +1,7 @@
 // Review PR — inline (no-view) command: type the PR number and pick the repo
 // right in the Raycast search bar, then it opens Claude on /review. SPEC §5.4.
 
-import { LaunchProps, showToast, Toast, showHUD } from "@raycast/api";
+import { LaunchProps, showToast, Toast, showHUD, closeMainWindow } from "@raycast/api";
 import { reviewPR } from "./lib/claude";
 import { repoPath } from "./lib/repos";
 
@@ -33,10 +33,11 @@ export default async function Command(props: LaunchProps<{ arguments: Args }>) {
     return;
   }
 
+  await closeMainWindow();
   try {
     await reviewPR(local, n);
     await showHUD(`Reviewing ${repoName}#${n}`);
   } catch (e) {
-    await showToast({ style: Toast.Style.Failure, title: "Failed", message: String(e) });
+    await showHUD(`❌ ${String(e).slice(0, 80)}`);
   }
 }

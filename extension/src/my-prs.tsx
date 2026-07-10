@@ -51,12 +51,13 @@ function PRItem({ pr }: { pr: PR }) {
       await showToast({ style: Toast.Style.Failure, title: "Repo not cloned locally", message: pr.repo });
       return;
     }
+    // Close Raycast first so keystrokes reach Ghostty, not Raycast's panel.
+    await closeMainWindow();
     try {
       await fn(local);
       await showHUD(hud);
-      await closeMainWindow();
     } catch (e) {
-      await showToast({ style: Toast.Style.Failure, title: "Failed", message: String(e) });
+      await showHUD(`❌ ${String(e).slice(0, 80)}`);
     }
   }
 

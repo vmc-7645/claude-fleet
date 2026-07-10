@@ -57,12 +57,12 @@ export default function Command() {
 
 function WtItem({ wt, onChange }: { wt: Worktree; onChange: () => void }) {
   async function openClaude() {
+    await closeMainWindow();
     try {
       await continueInDir(wt.path);
       await showHUD(`Opening ${wt.branch || basename(wt.path)}`);
-      await closeMainWindow();
     } catch (e) {
-      await showToast({ style: Toast.Style.Failure, title: "Failed", message: String(e) });
+      await showHUD(`❌ ${String(e).slice(0, 80)}`);
     }
   }
 

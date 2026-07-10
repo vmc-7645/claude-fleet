@@ -41,12 +41,12 @@ function IssueItem({ issue }: { issue: Issue }) {
       await showToast({ style: Toast.Style.Failure, title: "Repo not cloned locally", message: issue.repo });
       return;
     }
+    await closeMainWindow();
     try {
       await spawnAgent(local, `issue/${issue.number}`, `Work on issue #${issue.number}: ${issue.title}`);
       await showHUD(`Started agent for ${issue.repo}#${issue.number}`);
-      await closeMainWindow();
     } catch (e) {
-      await showToast({ style: Toast.Style.Failure, title: "Failed", message: String(e) });
+      await showHUD(`❌ ${String(e).slice(0, 80)}`);
     }
   }
 

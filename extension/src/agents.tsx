@@ -145,12 +145,14 @@ function AgentItem(props: {
   accessories.push({ text: ageLabel });
 
   async function act(fn: () => Promise<void>, hud: string) {
+    // Close Raycast FIRST so keyboard focus leaves its panel — otherwise the
+    // ⌘T/keystrokes we send to Ghostty are swallowed by Raycast's window.
+    await closeMainWindow();
     try {
       await fn();
       await showHUD(hud);
-      await closeMainWindow();
     } catch (e) {
-      await showToast({ style: Toast.Style.Failure, title: "Action failed", message: String(e) });
+      await showHUD(`❌ ${String(e).slice(0, 80)}`);
     }
   }
 
