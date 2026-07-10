@@ -1,6 +1,8 @@
 # Claude Code for Raycast — SPEC
 
-**Status:** draft spec, not built. **Owner:** Vincent.
+**Status:** BUILT — M1–M5 largely shipped and in daily use (see the README for the
+live command list). This doc is the design of record; a few items remain deferred
+(see §17). **Owner:** Vincent.
 **Supersedes:** `fleet-menubar-SPEC.md` (the menu bar is now one command among several).
 Gap resolutions from review are integrated below and indexed in Appendix A.
 
@@ -313,24 +315,28 @@ this repo consumes them.
 6. **Dev-extension persistence** — local dev extensions persist in Raycast after
    the dev server stops (updates need a re-run). ✓
 
-## 17. Milestones (revised — M1 no longer blocked on hooks, thanks to §6.1)
-- **M1** — **Agents** console built directly on **Claude's `~/.claude/sessions/`**
-  (active, busy/idle) + **`~/.claude/projects/`** (recent, titled by `aiTitle`),
-  §6.3 reconciliation, title cache; Resume / Fork / Jump (Resume-vs-Jump guard).
-  **No hook dependency — start here.**
-- **M2** — **My PRs** (cross-repo via `gh search`) + **Review in Claude**;
-  **Review PR** (form/arg); **Spawn Agent**. Add shared `claude-open-tab` helper.
-- **M0′ (enrichment — parallel/after, in `claude-mac-tweaks`)** — enrich
-  `fleet-register.sh` (`state`=waiting/done, `task`, `diff`, `last_tool`); the
-  Agents UI refines Claude's busy/idle → waiting/done + task when present.
-- **M3** — **Fleet** menu bar.
-- **M4** — `question` (transcript parse, graceful), diff Detail, Delete (careful,
-  §16.3), `--from-pr` linkage, Undo, Stop (best-effort).
-  **Requested:** (a) show each agent's **mode** (auto / plan / default) — capture
-  `permission_mode` from the hook payload into the fleet registry, render as a row
-  accessory; (b) **My PRs → "Check out & work"** — `gh pr checkout` into a fresh
-  worktree + spawn an agent (already scoped in §5.2).
-- **M5** — My Issues, Worktrees, full Preferences, GC.
+## 17. Milestones (status)
+- [x] **M1** — **Agents** console on `~/.claude/sessions/` + `~/.claude/projects/`;
+  Resume / Fork / **Focus Tab** (title-match + AXPress, with retry).
+- [x] **M2** — **My PRs** (cross-repo `gh search`) + **Review in Claude**;
+  **Review PR** (inline no-view args); **Spawn Agent**.
+- [x] **M0′** (in `claude-mac-tweaks`) — enriched `fleet-register.sh`
+  (`state` waiting/done, `task`, `diff`, `last_tool`, `mode`); Agents joins it.
+- [x] **M3** — **Fleet** menu bar (needs-you badge + roster).
+- [x] **M4** (most) — agent **mode** accessory; **Check Out & Work** (handles a
+  branch already checked out → opens in that worktree) + **Resume PR agent**
+  (`--from-pr`); **pending-question** in Detail (transcript read in TS); **PR CI
+  status**; Undo; **Stop** (SIGINT); **Nudge**, **Close Tab**, Copy resume cmd.
+  *(Deferred: Delete session — ancillary state, §16.3; PR diff inline; approve/merge.)*
+- [x] **M5** (most) — **My Issues**; **Worktrees** (open/resume/remove, **merged
+  🍂 flag**); **Preferences** (primary-click, editor, repos root); clean-up-stale GC;
+  scope filter. *(Deferred: dynamic Review-PR repo dropdown — it's static in the manifest.)*
+
+### Not implemented / notes
+- The shared `claude-open-tab` helper wasn't extracted — the extension opens tabs
+  itself via `runAppleScript` (AppleScript in `claude.ts`).
+- Key runtime fixes (see git log): `closeMainWindow()` before driving Ghostty;
+  avoid the `tab` keyword inside `tell process` (→ -10000); retry tab enumeration.
 
 ## 18. Decisions (resolved defaults)
 1. Badge = **needs-you count**. 2. Zero → **icon-only**. 3. Primary click =

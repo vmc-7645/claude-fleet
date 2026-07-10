@@ -5,66 +5,61 @@ dev surfaces (PRs, issues, running agents, past sessions) and **hand any of them
 to a Claude agent** — from anywhere, landing in a Ghostty tab. Plus an ambient
 menu-bar indicator of who needs you.
 
-> **Status:** spec-complete, verifications done, not yet built. Full design in
-> **[SPEC.md](SPEC.md)**.
+> **Status:** built and in daily use (installed as a local Raycast dev extension).
+> Full design in **[SPEC.md](SPEC.md)**.
 >
-> **Key finding:** Claude Code maintains its own live session registry at
-> `~/.claude/sessions/*.json` (sessionId · cwd · pid · live `busy`/`idle` status),
-> so the extension reads *that* for active agents — no hooks needed for liveness,
-> and no cold-start problem. Hooks become optional enrichment (task label,
-> waiting-vs-done, diff). See §6.1.
+> **How it knows about agents:** Claude Code maintains its own live session
+> registry at `~/.claude/sessions/*.json` (sessionId · cwd · pid · live
+> `busy`/`idle`), so the extension reads *that* for **active** agents — no hooks
+> needed for liveness. `~/.claude/projects/*.jsonl` gives **recent** sessions
+> (title = `aiTitle`, pending question = last assistant message), and the optional
+> `fleet-register` hook enriches active rows with waiting/done state, task, diff,
+> and mode.
 
-## The idea — the `→ Claude` primitive
-Every dev surface has a one-keystroke "hand it to an agent" action:
+## The `→ Claude` primitive
+Every dev surface has a one-keystroke "hand it to an agent" action.
 
-| Surface | `→ Claude` |
-|---|---|
-| a **PR** | Review in Claude / check out & work |
-| an **issue** | Start an agent on it |
-| a **task** | Spawn an agent (auto-branch) |
-| a past **session** | Resume / fork |
-| a running **agent** | Jump / resume / inspect |
+## Commands
+| Command | Mode | What it does |
+|---------|------|--------------|
+| **Agents** | list | Active (live) + Recent (history) console. Per agent: **Focus Tab** (jumps to the exact Ghostty tab), Resume, Fork, **Nudge** (type a follow-up into its tab), **Close Tab**, Undo last turn, Stop, Copy resume command, Open in editor/folder. **Detail pane** (⌘I) shows the pending question + mode/state/diff. **Scope** dropdown (All / Active / Recent / per-repo). |
+| **My PRs** | list | Cross-repo open PRs with **CI status** (✅/❌/⏳). Per PR: **Review in Claude**, **Check Out & Work** (worktree agent, or opens the existing worktree if the branch is already checked out), **Resume PR agent** (`--from-pr`), open, copy. |
+| **Spawn Agent** | form | Repo + task (+optional branch) → worktree agent seeded with the task. |
+| **Review PR** | inline | Type a PR number + pick a repo right in the search bar → `claude /review`. |
+| **My Issues** | list | Cross-repo open issues → start an agent on one. |
+| **Worktrees** | list | Worktrees across repos; open / resume / **remove**; merged branches flagged 🍂. |
+| **Claude Code Fleet** | menu bar | Needs-you count badge + roster; click an agent to focus its tab. |
 
-## Commands (planned)
-| Command | Purpose | Priority |
-|---------|---------|----------|
-| **Agents** | Active (live) + Recent (resumable history) console | MVP |
-| **My PRs** | Cross-repo PRs → Review in Claude / checkout | MVP |
-| **Spawn Agent** | Task (+branch, repo) → worktree agent | MVP |
-| **Review PR** | Repo-aware `PR → Review in Claude` | MVP |
-| **Fleet** | Menu-bar count + roster of agents needing you | v1 |
-| **Reopen Fleet** | Reopen agents after a reboot/crash | v1 |
-| **My Issues** | Issues → start an agent | v1 |
-| **Worktrees** | Open / resume / remove worktrees | Later |
+## Focus Tab — how it works
+The tab-status hook sets each Ghostty tab's title to `<emoji> <repo>:<branch> — <task>`.
+Ghostty exposes tabs as a native `AXTabGroup` of `AXRadioButton`s (titles = those
+strings), so the extension matches an agent to its tab by title and `AXPress`es
+it. Falls back to raising Ghostty if no match. (Enumeration is retried — System
+Events occasionally throws a flaky `-10000`.)
 
-## Milestone status
-- [x] **M1** — Agents console on Claude's `~/.claude/sessions/` + `projects/` (resume/fork/jump)
-- [x] **M2** — My PRs (→ Review in Claude) + Review PR + Spawn Agent
-- [x] **M0′** — enriched `fleet-register.sh` (waiting/done state, task, diff, last tool) *(in [claude-mac-tweaks](https://github.com/vmc-7645/claude-mac-tweaks); Agents joins it)*
-- [x] **M3** — Fleet menu bar (needs-you badge + roster)
-- [x] **M4** (most) — **agent mode (auto/plan)**, **My PRs → check out & work** + resume-from-PR, Detail pane (⌘I), undo, stop *(deferred: pending-question read, PR CI status, delete)*
-- [x] **M5** (most) — My Issues, Worktrees (open/resume/remove), clean-up-stale GC *(deferred: full Raycast preferences — repos still come from `repos.env`)*
+## Preferences (Raycast → Extensions → Claude Code → ⚙️)
+- **Agent primary action** — Focus Tab vs Resume (what Enter does on a live agent)
+- **Editor command** — `code` / `cursor` / … (for Open in Editor)
+- **Repos directory** — override discovery root (else `repos.env` / `~/Repos`)
 
 ## Dependencies
-The **collector** (`fleet-register.sh`, enriched at M0) and the shared
-**`claude-open-tab`** helper live in
-[`claude-mac-tweaks`](https://github.com/vmc-7645/claude-mac-tweaks) — they also
-power `fleet-restore` and `worktree-launcher`. This repo *consumes* the
-`~/.claude/fleet/` registry + Claude's session history; it does not own the hooks.
+Consumes data + tools from
+[`claude-mac-tweaks`](https://github.com/vmc-7645/claude-mac-tweaks):
+`~/.claude/fleet/` (from `fleet-register.sh`), `~/.config/claude-mac-tweaks/repos.env`,
+and the `claude-worktree` / `claude-restore` commands. Also needs
+[`gh`](https://cli.github.com), Ghostty, and Claude Code's own
+`~/.claude/sessions` + `~/.claude/projects`.
 
-Also depends on: `claude-worktree`, `claude-restore` (claude-mac-tweaks),
-[`gh`](https://cli.github.com), and Ghostty.
-
-## Setup (once the extension exists)
-1. Install & enrich the collector in `claude-mac-tweaks` (M0), then **restart
-   Claude Code** so live tracking begins (the registry only fills for sessions
-   started after the hooks load).
+## Setup
+1. Install the `claude-mac-tweaks` hooks and **restart Claude Code** so
+   `fleet-register` starts enriching active sessions (liveness itself needs no
+   hooks). Set your repos root via `claude-repos-refresh` / **Set Repos Directory**.
 2. `gh auth login` — for My PRs / My Issues.
-3. Grant **Accessibility** to the terminal/Ghostty on first tab-opening action
-   (or set `tabOpenMode = window` to avoid it).
-4. Set your repos directory (`claude-repos-refresh` / Set Repos Directory), or let
-   the extension auto-discover under `~/Repos`.
-5. `npm ci && npm run dev` (Raycast `ray develop`) to run the extension locally.
+3. `cd extension && npm ci && npm run dev` — imports it into Raycast (persists
+   after you stop the dev server).
+4. **Grant Raycast Accessibility** (System Settings → Privacy & Security →
+   Accessibility → enable Raycast) — required for the ⌘T / keystroke / tab-focus
+   actions; `gh` reads work without it.
 
 ## License
 Personal project — all rights reserved unless noted.
