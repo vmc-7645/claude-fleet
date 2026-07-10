@@ -185,8 +185,25 @@ export async function resumeFromPr(repoPath: string, prNumber: number): Promise<
   await openInGhosttyTab(repoPath, `claude --from-pr ${prNumber}`);
 }
 
-// Check out a PR into a fresh worktree and start an agent on it. Uses the PR's
-// head branch, reusing claude-worktree's remote-tracking path. SPEC §5.2.
+// Find the worktree (if any) that already has `branch` checked out.
+async function worktreeForBranch(repoPath: string, branch: string): Promise<string | null> {
+  try {
+    const out = await run("git", ["-C", repoPath, "worktree", "list", "--porcelain"]);
+    let path = "";
+    for (const line of out.split("\n")) {
+      if (line.startsWith("worktree ")) path = line.slice("worktree ".length);
+      else if (line.startsWith("branch ") && line.slice("branch ".length).replace("refs/heads/", "") === branch)
+        return path;
+    }
+  } catch {
+    // fall through
+  }
+  return null;
+}
+
+// Start an agent on a PR. If the PR's branch is already checked out in a worktree
+// (a branch can only live in one worktree), open the agent THERE; otherwise
+// create a fresh worktree. SPEC §5.2.
 export async function checkoutAndWork(
   repoPath: string,
   repo: string,
@@ -199,8 +216,13 @@ export async function checkoutAndWork(
     })
   ).trim();
   if (!branch) throw new Error("could not resolve PR branch");
-  await run("claude-worktree", [branch], {
-    cwd: repoPath,
-    env: { CLAUDE_WT_PROMPT: `Working on PR #${prNumber}: ${title}` },
-  });
+  const task = `Working on PR #${prNumber}: ${title}`;
+
+  const existing = await worktreeForBranch(repoPath, branch);
+  if (existing) {
+    // Branch already checked out — open the agent in that worktree.
+    await openInGhosttyTab(existing, `claude ${shq(task)}`);
+    return;
+  }
+  await run("claude-worktree", [branch], { cwd: repoPath, env: { CLAUDE_WT_PROMPT: task } });
 }
