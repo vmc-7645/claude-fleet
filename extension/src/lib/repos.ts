@@ -2,13 +2,28 @@
 // (~/.config/claude-mac-tweaks/repos.env: REPO_ROOT + DEFAULT_REPO). An optional
 // override (from the extension preference) wins over the config. SPEC §7.
 
-import { existsSync, readFileSync, readdirSync } from "fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
 
 export interface Repo {
   name: string;
   path: string;
+  mtime: number; // recency signal (max of dir / .git / .git/HEAD mtime)
+}
+
+const MAX_REPOS = 50;
+
+function recency(path: string): number {
+  let m = 0;
+  for (const p of [path, join(path, ".git"), join(path, ".git", "HEAD")]) {
+    try {
+      m = Math.max(m, statSync(p).mtimeMs);
+    } catch {
+      // skip
+    }
+  }
+  return m;
 }
 
 function expand(p: string): string {
@@ -45,10 +60,11 @@ export function listRepos(overrideRoot?: string): Repo[] {
   for (const name of entries) {
     if (name.endsWith("-worktrees")) continue;
     const path = join(root, name);
-    if (existsSync(join(path, ".git"))) out.push({ name, path });
+    if (existsSync(join(path, ".git"))) out.push({ name, path, mtime: recency(path) });
   }
-  out.sort((a, b) => a.name.localeCompare(b.name));
-  return out;
+  // Most-recently-active first, capped so a huge repos dir stays manageable.
+  out.sort((a, b) => b.mtime - a.mtime);
+  return out.slice(0, MAX_REPOS);
 }
 
 export function repoPath(nameOrOwnerRepo: string, overrideRoot?: string): string | undefined {

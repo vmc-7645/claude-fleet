@@ -63,25 +63,7 @@
       "title": "Review PR",
       "subtitle": "Claude Code",
       "description": "Open Claude to review a PR in a chosen repo.",
-      "mode": "no-view",
-      "arguments": [
-        { "name": "pr", "type": "text", "placeholder": "PR number", "required": true },
-        {
-          "name": "repo",
-          "type": "dropdown",
-          "placeholder": "repo",
-          "data": [
-            { "title": "myrepo", "value": "myrepo" },
-            { "title": "claude-code-for-raycast", "value": "claude-code-for-raycast" },
-            { "title": "claude-mac-tweaks", "value": "claude-mac-tweaks" },
-            { "title": "example-repo-2", "value": "example-repo-2" },
-            { "title": "example-repo-3", "value": "example-repo-3" },
-            { "title": "example-repo-4", "value": "example-repo-4" },
-            { "title": "example-repo-5", "value": "example-repo-5" },
-            { "title": "example-repo-6", "value": "example-repo-6" }
-          ]
-        }
-      ]
+      "mode": "view"
     },
     {
       "name": "my-issues",
@@ -130,24 +112,7 @@
       "title": "New Session",
       "subtitle": "Claude Code",
       "description": "Start a fresh Claude session in a repo (no worktree).",
-      "mode": "no-view",
-      "arguments": [
-        {
-          "name": "repo",
-          "type": "dropdown",
-          "placeholder": "repo",
-          "data": [
-            { "title": "myrepo", "value": "myrepo" },
-            { "title": "claude-code-for-raycast", "value": "claude-code-for-raycast" },
-            { "title": "claude-mac-tweaks", "value": "claude-mac-tweaks" },
-            { "title": "example-repo-2", "value": "example-repo-2" },
-            { "title": "example-repo-3", "value": "example-repo-3" },
-            { "title": "example-repo-4", "value": "example-repo-4" },
-            { "title": "example-repo-5", "value": "example-repo-5" },
-            { "title": "example-repo-6", "value": "example-repo-6" }
-          ]
-        }
-      ]
+      "mode": "view"
     },
     {
       "name": "fleet-menu-bar",
