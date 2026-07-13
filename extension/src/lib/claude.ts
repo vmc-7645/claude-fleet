@@ -6,7 +6,7 @@ import { runAppleScript } from "@raycast/utils";
 import { homedir } from "os";
 import { Agent } from "./types";
 import { run } from "./exec";
-import { agentMatchesTab } from "./tabmatch";
+import { AgentTab, tabMatchScore } from "./tabmatch";
 
 function shq(s: string): string {
   return "'" + s.replace(/'/g, "'\\''") + "'";
@@ -44,32 +44,40 @@ export async function jumpToGhostty(): Promise<void> {
   await runAppleScript('tell application "Ghostty" to activate');
 }
 
-// Focus the exact Ghostty tab for an agent by matching the tab title (which the
-// tab-status hook sets to "<emoji> <repo>:<branch> — <task>"). Ghostty uses a
-// native AXTabGroup of AXRadioButtons whose titles are those strings. SPEC §8.
+// Focus the exact Ghostty window/tab for an agent by matching its title (which
+// the tab-status hook sets to "<emoji> <repo>[:<branch>] [— <task>]"). SPEC §8.
+//
+// We enumerate BOTH each window's title AND, when a window has a tab bar, each
+// tab's title. A single-tab Ghostty window has NO AXTabGroup (and thus no radio
+// buttons), so tabs-only enumeration misses it entirely — the window title is
+// how we find those. Emit "W|||<win>|||0|||<title>" per window and
+// "T|||<win>|||<tab>|||<title>" per tab.
+//
 // NOTE: avoid the `tab` keyword inside `tell process` — it shadows a UI-element
-// class and throws -10000. Iterate windows by index with try/exit (list
-// enumeration is also flaky), and delimit fields with "|||".
-const GET_TABS = [
+// class and throws -10000. `first tab group of w` throws for single-tab
+// windows, so it's wrapped in its own try that must NOT abort the window loop.
+const ENUMERATE = [
   'tell application "System Events"',
   '  tell process "Ghostty"',
   '    set out to ""',
-  "    set wi to 1",
-  "    repeat 12 times",
+  "    set wc to count of windows",
+  "    repeat with wi from 1 to wc",
+  "      set w to window wi",
+  '      set wt to ""',
   "      try",
-  "        set w to window wi",
-  "        set tg to first tab group of w",
-  "      on error",
-  "        exit repeat",
+  "        set wt to title of w",
   "      end try",
-  "      set ti to 0",
-  "      repeat with rb in (radio buttons of tg)",
-  "        set ti to ti + 1",
-  "        try",
-  '          set out to out & (wi as text) & "|||" & (ti as text) & "|||" & (title of rb) & linefeed',
-  "        end try",
-  "      end repeat",
-  "      set wi to wi + 1",
+  '      set out to out & "W|||" & (wi as text) & "|||0|||" & wt & linefeed',
+  "      try",
+  "        set tg to first tab group of w",
+  "        set ti to 0",
+  "        repeat with rb in (radio buttons of tg)",
+  "          set ti to ti + 1",
+  "          try",
+  '            set out to out & "T|||" & (wi as text) & "|||" & (ti as text) & "|||" & (title of rb) & linefeed',
+  "          end try",
+  "        end repeat",
+  "      end try",
   "    end repeat",
   "    return out",
   "  end tell",
@@ -89,35 +97,67 @@ function selectTabScript(win: number, tab: number): string {
   ].join("\n");
 }
 
+// For a single-tab window (no tab group to AXPress), just raise it to the front.
+function raiseWindowScript(win: number): string {
+  return [
+    'tell application "Ghostty" to activate',
+    'tell application "System Events"',
+    '  tell process "Ghostty"',
+    `    perform action "AXRaise" of window ${win}`,
+    "  end tell",
+    "end tell",
+  ].join("\n");
+}
+
+// The worktree's current branch — the strong, deterministic half of the match.
+async function branchOf(cwd: string): Promise<string> {
+  try {
+    return (await run("git", ["-C", cwd, "rev-parse", "--abbrev-ref", "HEAD"])).trim();
+  } catch {
+    return "";
+  }
+}
 
 export async function focusAgentTab(agent: Agent): Promise<boolean> {
+  const id: AgentTab = { repo: agent.repo, branch: await branchOf(agent.cwd), task: agent.title };
+
   // Enumeration can hit a flaky System Events -10000; retry a few times.
   let raw = "";
   for (let attempt = 0; attempt < 4; attempt++) {
     try {
-      raw = await runAppleScript(GET_TABS);
+      raw = await runAppleScript(ENUMERATE);
       if (raw.trim()) break;
     } catch (e) {
-      console.error(`[focus] GET_TABS attempt ${attempt} error: ${String(e).slice(0, 120)}`);
+      console.error(`[focus] enumerate attempt ${attempt} error: ${String(e).slice(0, 120)}`);
     }
   }
-  const lines = raw.split("\n").filter((l) => l.includes("|||"));
-  for (const line of lines) {
+
+  // Pick the highest-scoring title. On a tie, prefer a real tab ("T") over the
+  // window-title fallback ("W") so a multi-tab window presses the exact tab.
+  let best: { win: number; tab: number; kind: string; score: number } | null = null;
+  for (const line of raw.split("\n")) {
+    if (!line.includes("|||")) continue;
     const parts = line.split("|||");
-    if (parts.length < 3) continue;
-    const win = parseInt(parts[0], 10);
-    const tab = parseInt(parts[1], 10);
-    const title = parts.slice(2).join("|||");
-    if (Number.isFinite(win) && Number.isFinite(tab) && agentMatchesTab(agent, title)) {
-      try {
-        await runAppleScript(selectTabScript(win, tab));
-        return true;
-      } catch {
-        return false;
-      }
+    if (parts.length < 4) continue;
+    const kind = parts[0];
+    const win = parseInt(parts[1], 10);
+    const tab = parseInt(parts[2], 10);
+    const title = parts.slice(3).join("|||");
+    if (!Number.isFinite(win) || !Number.isFinite(tab)) continue;
+    const score = tabMatchScore(id, title);
+    if (score <= 0) continue;
+    if (!best || score > best.score || (score === best.score && kind === "T" && best.kind === "W")) {
+      best = { win, tab, kind, score };
     }
   }
-  return false; // no tab matched → caller raises Ghostty
+
+  if (!best) return false; // no match → caller raises Ghostty
+  try {
+    await runAppleScript(best.kind === "T" ? selectTabScript(best.win, best.tab) : raiseWindowScript(best.win));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // Focus the agent's exact tab; fall back to just raising Ghostty if no match.
