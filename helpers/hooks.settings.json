@@ -1,0 +1,60 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "\"$HOME/.claude/hooks/tab-status.sh\" '🟢'" },
+          { "type": "command", "command": "\"$HOME/.claude/hooks/fleet-register.sh\" touch idle" }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          { "type": "command", "command": "\"$HOME/.claude/hooks/tab-status.sh\" '⚙️'" },
+          { "type": "command", "command": "\"$HOME/.claude/hooks/fleet-register.sh\" touch working" },
+          { "type": "command", "command": "\"$HOME/.claude/hooks/checkpoint.sh\"" }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          { "type": "command", "command": "\"$HOME/.claude/hooks/tab-status.sh\" '⚙️'" },
+          { "type": "command", "command": "\"$HOME/.claude/hooks/fleet-register.sh\" touch working" }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "\"$HOME/.claude/hooks/tab-status.sh\" '✅' 'Blow'" },
+          { "type": "command", "command": "\"$HOME/.claude/hooks/fleet-register.sh\" touch done" }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "permission_prompt",
+        "hooks": [
+          { "type": "command", "command": "\"$HOME/.claude/hooks/tab-status.sh\" '🔔' 'Submarine'" },
+          { "type": "command", "command": "\"$HOME/.claude/hooks/fleet-register.sh\" touch waiting" }
+        ]
+      },
+      {
+        "matcher": "idle_prompt",
+        "hooks": [
+          { "type": "command", "command": "\"$HOME/.claude/hooks/tab-status.sh\" '💤' 'Tink'" },
+          { "type": "command", "command": "\"$HOME/.claude/hooks/fleet-register.sh\" touch idle" }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          { "type": "command", "command": "\"$HOME/.claude/hooks/fleet-register.sh\" end" }
+        ]
+      }
+    ]
+  }
+}

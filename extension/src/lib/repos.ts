@@ -1,6 +1,8 @@
-// Discover local repos, reusing the shell tweaks' config
-// (~/.config/claude-mac-tweaks/repos.env: REPO_ROOT + DEFAULT_REPO). An optional
-// override (from the extension preference) wins over the config. SPEC §7.
+// Discover local repos, reusing the config at
+// ~/.config/claude-code-for-raycast/repos.env (REPO_ROOT + DEFAULT_REPO). The
+// legacy ~/.config/claude-mac-tweaks/repos.env path is still read for
+// back-compat. An optional override (from the extension preference) wins over
+// the config. SPEC §7.
 
 import { existsSync, readFileSync, readdirSync, statSync } from "fs";
 import { homedir } from "os";
@@ -39,19 +41,30 @@ function expand(p: string): string {
   return p.replace(/^~(?=$|\/)/, homedir());
 }
 
+// Preferred config path first; the legacy claude-mac-tweaks path is read only
+// if the new one is absent (back-compat). First file that exists wins.
+const CONFIG_PATHS = [
+  join(homedir(), ".config", "claude-code-for-raycast", "repos.env"),
+  join(homedir(), ".config", "claude-mac-tweaks", "repos.env"),
+];
+
 export function reposConfig(overrideRoot?: string): { root: string; defaultRepo?: string } {
-  const cfg = join(homedir(), ".config", "claude-mac-tweaks", "repos.env");
   let root = join(homedir(), "Repos");
   let defaultRepo: string | undefined;
-  try {
-    for (const line of readFileSync(cfg, "utf8").split("\n")) {
+  for (const cfg of CONFIG_PATHS) {
+    let text: string;
+    try {
+      text = readFileSync(cfg, "utf8");
+    } catch {
+      continue; // not present — try the next candidate
+    }
+    for (const line of text.split("\n")) {
       const r = line.match(/^REPO_ROOT="?([^"]*)"?/);
       if (r) root = expand(r[1]);
       const d = line.match(/^DEFAULT_REPO="?([^"]*)"?/);
       if (d && d[1]) defaultRepo = d[1];
     }
-  } catch {
-    // defaults
+    break; // first config found wins; don't let the legacy file override it
   }
   if (overrideRoot && overrideRoot.trim()) root = expand(overrideRoot.trim());
   return { root, defaultRepo };

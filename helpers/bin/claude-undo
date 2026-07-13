@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+#
+# claude-undo [--list]
+#
+# Roll the working tree back to the checkpoint taken at the start of the last
+# Claude turn (see hooks/checkpoint.sh). This reverts everything an agent did
+# that turn: modifications, new files, and deletions.
+#
+# It is reversible: the current state is snapshotted first, and the command to
+# restore it is printed.
+#
+# macOS bash 3.2 compatible.
+set -uo pipefail
+
+me="claude-undo"
+die() { printf '%s: %s\n' "$me" "$1" >&2; exit "${2:-1}"; }
+
+git rev-parse --git-dir >/dev/null 2>&1 || die "not inside a git repository"
+top="$(git rev-parse --show-toplevel)"
+cd "$top" || die "cannot cd to repo root"
+
+key="$(printf '%s' "$top" | tr -c 'A-Za-z0-9' '-' | sed -e 's/^-*//' -e 's/-*$//')"
+prefix="refs/claude-checkpoints/${key}"
+turns="${prefix}/turn"
+
+list() { git for-each-ref --sort=-refname --format='%(refname)' "$turns" 2>/dev/null; }
+
+if [ "${1:-}" = "--list" ] || [ "${1:-}" = "-l" ]; then
+  if [ "$(list | wc -l | tr -d ' ')" -eq 0 ]; then
+    echo "no checkpoints for $top"
+    exit 0
+  fi
+  echo "checkpoints for $top (newest first):"
+  list | while IFS= read -r r; do
+    c="$(git rev-parse "$r")"
+    printf '  %s  (%s)  %s file(s) differ from now\n' \
+      "${r##*/}" "$(git log -1 --format=%cr "$c")" \
+      "$(git diff --name-only "$c" -- . 2>/dev/null | wc -l | tr -d ' ')"
+  done
+  exit 0
+fi
+
+latest="$(list | head -1)"
+[ -n "$latest" ] || die "no checkpoints found for this worktree"
+C="$(git rev-parse "$latest")"
+label="${latest##*/}"
+
+echo "Restore worktree to checkpoint from start of turn: $label ($(git log -1 --format=%cr "$C"))"
+echo
+echo "Tracked changes that will be reverted:"
+git --no-pager diff --stat "$C" -- . 2>/dev/null | sed 's/^/  /'
+echo
+echo "Untracked files that will be REMOVED:"
+git clean -nd 2>/dev/null | sed 's/^/  /'
+echo
+printf 'Proceed? (a safety snapshot is taken first) [y/N] '
+read -r ans
+case "$ans" in
+  y|Y|yes|YES) ;;
+  *) echo "aborted."; exit 1 ;;
+esac
+
+# Safety snapshot of the CURRENT state so this undo is itself reversible.
+stamp="$(date +%Y%m%d-%H%M%S)"
+ti="$(mktemp "${TMPDIR:-/tmp}/claude-ckpt.XXXXXX")"
+GIT_INDEX_FILE="$ti" git read-tree HEAD 2>/dev/null \
+  || GIT_INDEX_FILE="$ti" git read-tree --empty 2>/dev/null
+GIT_INDEX_FILE="$ti" git add -A 2>/dev/null || true
+st="$(GIT_INDEX_FILE="$ti" git write-tree 2>/dev/null)"
+rm -f "$ti"
+head="$(git rev-parse -q --verify HEAD 2>/dev/null || true)"
+safety_ref=""
+if [ -n "$st" ]; then
+  if [ -n "$head" ]; then
+    sc="$(git commit-tree "$st" -p "$head" -m "pre-undo $stamp" 2>/dev/null)"
+  else
+    sc="$(git commit-tree "$st" -m "pre-undo $stamp" 2>/dev/null)"
+  fi
+  if [ -n "$sc" ]; then
+    safety_ref="${prefix}/preundo/${stamp}"
+    git update-ref "$safety_ref" "$sc" 2>/dev/null || true
+  fi
+fi
+
+# Restore tracked paths to the checkpoint, then remove files created afterwards.
+# (Files untracked at checkpoint time were captured into it, so they survive.)
+git checkout "$C" -- . 2>/dev/null || die "git checkout of checkpoint failed"
+git clean -fd >/dev/null 2>&1 || true
+
+echo
+echo "✓ reverted to checkpoint $label"
+if [ -n "$safety_ref" ]; then
+  echo "  undo this undo:  git checkout ${safety_ref} -- . && git clean -fd"
+fi

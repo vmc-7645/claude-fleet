@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+#
+# claude-restore [--list]
+#
+# Reopen the Claude agents that were running before the last reboot/crash.
+# Reads the durable registry written by fleet-register.sh, finds agents whose
+# session isn't currently running, and opens a new Ghostty tab per agent running
+# `claude --resume <session-id>` in its worktree.
+#
+# --list  just prints what would be restored (no tabs opened).
+#
+# macOS bash 3.2 compatible.
+set -uo pipefail
+
+me="claude-restore"
+dir="$HOME/.claude/fleet"
+[ -d "$dir" ] || { echo "$me: no fleet registry yet ($dir)"; exit 0; }
+
+# Epoch of the last boot: agents last seen before this are dead (died in reboot).
+boot="$(sysctl -n kern.boottime 2>/dev/null | awk '{print $4}' | tr -d ',')"
+[ -n "$boot" ] || boot=0
+now="$(date +%s)"
+week=$((7 * 24 * 3600))
+
+# Build a tab-separated candidate list: sid \t cwd \t repo \t branch \t task
+tmp="$(mktemp)"
+for f in "$dir"/*.json; do
+  [ -e "$f" ] || continue
+  sid="$(jq -r '.session_id // empty' "$f" 2>/dev/null)"; [ -n "$sid" ] || continue
+  cwd="$(jq -r '.cwd // empty' "$f" 2>/dev/null)"
+  repo="$(jq -r '.repo // empty' "$f" 2>/dev/null)"
+  branch="$(jq -r '.branch // empty' "$f" 2>/dev/null)"
+  task="$(jq -r '.task // empty' "$f" 2>/dev/null)"
+  seen="$(jq -r '.last_seen // 0' "$f" 2>/dev/null)"
+  pid="$(jq -r '.pid // 0' "$f" 2>/dev/null)"
+
+  # Drop stale (worktree gone, or older than a week).
+  if [ ! -d "$cwd" ] || [ $((now - seen)) -gt "$week" ] 2>/dev/null; then
+    continue
+  fi
+  # Skip if it looks like it's still running: seen since boot AND pid alive.
+  if [ "$seen" -ge "$boot" ] 2>/dev/null && kill -0 "$pid" 2>/dev/null; then
+    continue
+  fi
+  printf '%s\t%s\t%s\t%s\t%s\n' "$sid" "$cwd" "$repo" "$branch" "$task" >> "$tmp"
+done
+
+count="$(wc -l < "$tmp" | tr -d ' ')"
+if [ "$count" -eq 0 ]; then
+  echo "$me: nothing to restore (no stopped agents in the registry)."
+  rm -f "$tmp"; exit 0
+fi
+
+echo "$me: $count agent(s) to restore:"
+i=0
+while IFS="$(printf '\t')" read -r sid cwd repo branch task; do
+  i=$((i + 1))
+  printf '  [%d] %s:%s  %s\n      %s\n' "$i" "$repo" "$branch" "${task:-}" "$cwd"
+done < "$tmp"
+
+if [ "${1:-}" = "--list" ] || [ "${1:-}" = "-l" ]; then
+  rm -f "$tmp"; exit 0
+fi
+
+# --yes / -y skips the prompt (for non-interactive callers like Raycast).
+if [ "${1:-}" != "--yes" ] && [ "${1:-}" != "-y" ]; then
+  echo
+  printf 'Reopen these in new Ghostty tabs (claude --resume)? [y/N] '
+  read -r ans
+  case "$ans" in y|Y|yes|YES) ;; *) echo "aborted."; rm -f "$tmp"; exit 1 ;; esac
+fi
+
+while IFS="$(printf '\t')" read -r sid cwd repo branch task; do
+  cmd="cd $(printf '%q' "$cwd") && claude --resume $(printf '%q' "$sid")"
+  osascript - "$cmd" >/dev/null <<'APPLESCRIPT'
+on run argv
+  set theCmd to item 1 of argv
+  tell application "Ghostty" to activate
+  delay 0.2
+  tell application "System Events"
+    keystroke "t" using {command down}
+    delay 0.5
+    keystroke theCmd
+    key code 36
+  end tell
+end run
+APPLESCRIPT
+  sleep 1.2
+done < "$tmp"
+rm -f "$tmp"
+echo "✓ reopened $count agent(s)."

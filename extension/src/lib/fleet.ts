@@ -1,6 +1,6 @@
 // Optional enrichment from the fleet hook: ~/.claude/fleet/<sessionId>.json
-// (written by fleet-register.sh in claude-mac-tweaks). Adds finer state
-// (waiting/done), the task label, diff, and last tool. SPEC §6.1a.
+// (written by helpers/hooks/fleet-register.sh). Adds finer state (waiting/done),
+// the task label, diff, and last tool. SPEC §6.1a.
 
 import { readFileSync, readdirSync, unlinkSync } from "fs";
 import { homedir } from "os";
