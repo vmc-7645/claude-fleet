@@ -53,11 +53,32 @@ export async function jumpToGhostty(): Promise<void> {
 // how we find those. Emit "W|||<win>|||0|||<title>" per window and
 // "T|||<win>|||<tab>|||<title>" per tab.
 //
+// Find a window's tab group and bind it to `tg` (missing value if none). In a
+// normal window the AXTabGroup is a direct child; in a NATIVE-FULLSCREEN window
+// Ghostty nests it one level deeper (window → AXGroup → AXTabGroup), so a plain
+// `first tab group of w` finds nothing and every background tab becomes
+// invisible. Search depth 0, then depth 1. `wref` is the window expression.
+function findTabGroup(wref: string): string[] {
+  return [
+    "    set tg to missing value",
+    "    try",
+    `      set tg to first tab group of ${wref}`,
+    "    end try",
+    "    if tg is missing value then",
+    `      repeat with g in (UI elements of ${wref})`,
+    "        try",
+    "          set tg to first tab group of g",
+    "          exit repeat",
+    "        end try",
+    "      end repeat",
+    "    end if",
+  ];
+}
+
 // NOTE: avoid the `tab` keyword inside `tell process` — it shadows a UI-element
-// class and throws -10000. `first tab group of w` throws for single-tab
-// windows, so it's wrapped in its own try that must NOT abort the window loop.
-// Each line carries a fullscreen flag ("1"/"0") so focus can switch Spaces for
-// a native-fullscreen window. Fields: KIND|||win|||tab|||fs|||title.
+// class and throws -10000. Each line carries a fullscreen flag ("1"/"0") so
+// focus can switch Spaces for a native-fullscreen window. Fields:
+// KIND|||win|||tab|||fs|||title.
 const ENUMERATE = [
   'tell application "System Events"',
   '  tell process "Ghostty"',
@@ -74,8 +95,8 @@ const ENUMERATE = [
   '        if (value of attribute "AXFullScreen" of w) is true then set fs to "1"',
   "      end try",
   '      set out to out & "W|||" & (wi as text) & "|||0|||" & fs & "|||" & wt & linefeed',
-  "      try",
-  "        set tg to first tab group of w",
+  ...findTabGroup("w"),
+  "      if tg is not missing value then",
   "        set ti to 0",
   "        repeat with rb in (radio buttons of tg)",
   "          set ti to ti + 1",
@@ -83,7 +104,7 @@ const ENUMERATE = [
   '            set out to out & "T|||" & (wi as text) & "|||" & (ti as text) & "|||" & fs & "|||" & (title of rb) & linefeed',
   "          end try",
   "        end repeat",
-  "      end try",
+  "      end if",
   "    end repeat",
   "    return out",
   "  end tell",
@@ -105,7 +126,15 @@ function focusScript(win: number, tab: number | null, fullscreen: boolean): stri
     `    perform action "AXRaise" of window ${win}`,
   ];
   if (tab !== null) {
-    lines.push(`    perform action "AXPress" of (radio button ${tab} of (first tab group of window ${win}))`);
+    // Same depth-0-or-1 search as enumeration, so fullscreen tabs press too.
+    lines.push(
+      ...findTabGroup(`window ${win}`),
+      "    if tg is not missing value then",
+      "      try",
+      `        perform action "AXPress" of (radio button ${tab} of tg)`,
+      "      end try",
+      "    end if",
+    );
   }
   lines.push("  end tell", "end tell", 'tell application "Ghostty" to activate');
   if (fullscreen) {
