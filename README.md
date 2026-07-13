@@ -34,33 +34,33 @@ a terminal to start work; start it from wherever you already are.
 Thirteen commands, grouped by what you reach for.
 
 #### 🤖 Agents & fleet
-| Command | Mode | What it does |
-|---|---|---|
-| **Agents** | list | Active (live) + Recent (history) console. Per agent: **Focus Tab** (jumps to the exact Ghostty tab), Resume, Fork, **Nudge** / **Quick Reply** (send a canned follow-up into its tab), **Close Tab**, Undo last turn, Stop, open in editor/folder. Detail pane (⌘I) shows the pending question + mode/state/diff. **Scope** dropdown (All / Active / Recent / per-repo). |
-| **Fleet** | menu bar | Needs-you count badge + roster; click an agent to focus its tab. Refreshes every minute. |
+|  | Command | Mode | What it does |
+|:-:|---|---|---|
+| <img src="extension/assets/cmd/agents.svg" width="28"> | **Agents** | list | Active (live) + Recent (history) console. Per agent: **Focus Tab** (jumps to the exact Ghostty tab), Resume, Fork, **Nudge** / **Quick Reply** (send a canned follow-up into its tab), **Close Tab**, Undo last turn, Stop, open in editor/folder. Detail pane (⌘I) shows the pending question + mode/state/diff. **Scope** dropdown (All / Active / Recent / per-repo). |
+| <img src="extension/assets/icon.png" width="28"> | **Fleet** | menu bar | Needs-you count badge + roster; click an agent to focus its tab. Refreshes every minute. |
 
 #### 🔀 PRs, issues & worktrees
-| Command | Mode | What it does |
-|---|---|---|
-| **My PRs** | list | Your cross-repo open PRs with **CI status** (✅ / ❌ / ⏳). Per PR: **Review in Claude**, **Check Out & Work**, **Resume PR agent** (`--from-pr`). |
-| **PRs to Review** | list | PRs where someone **requested your review** (cross-repo, with CI + author) → **Review in Claude** (`/review`), cloning the repo on demand. |
-| **My Issues** | list | Cross-repo open issues → start an agent seeded with the issue. |
-| **Review PR** | form | Type a PR number + pick a repo → `claude /review`. |
-| **Worktrees** | list | Worktrees across repos; open / resume / **remove**; merged branches flagged 🍂. |
+|  | Command | Mode | What it does |
+|:-:|---|---|---|
+| <img src="extension/assets/cmd/my-prs.svg" width="28"> | **My PRs** | list | Your cross-repo open PRs with **CI status** (✅ / ❌ / ⏳). Per PR: **Review in Claude**, **Check Out & Work**, **Resume PR agent** (`--from-pr`). |
+| <img src="extension/assets/cmd/review-requests.svg" width="28"> | **PRs to Review** | list | PRs where someone **requested your review** (cross-repo, with CI + author) → **Review in Claude** (`/review`), cloning the repo on demand. |
+| <img src="extension/assets/cmd/my-issues.svg" width="28"> | **My Issues** | list | Cross-repo open issues → start an agent seeded with the issue. |
+| <img src="extension/assets/cmd/review-pr.svg" width="28"> | **Review PR** | form | Type a PR number + pick a repo → `claude /review`. |
+| <img src="extension/assets/cmd/worktrees.svg" width="28"> | **Worktrees** | list | Worktrees across repos; open / resume / **remove**; merged branches flagged 🍂. |
 
 #### 🚀 Spawn & start
-| Command | Mode | What it does |
-|---|---|---|
-| **Spawn Agent** | form | Repo + task (+ optional branch) → agent in a fresh worktree, seeded with the task. |
-| **New Session** | form | Fresh Claude session in a repo (no worktree). |
+|  | Command | Mode | What it does |
+|:-:|---|---|---|
+| <img src="extension/assets/cmd/spawn.svg" width="28"> | **Spawn Agent** | form | Repo + task (+ optional branch) → agent in a fresh worktree, seeded with the task. |
+| <img src="extension/assets/cmd/new-session.svg" width="28"> | **New Session** | form | Fresh Claude session in a repo (no worktree). |
 
 #### ⚙️ Manage Claude Code
-| Command | Mode | What it does |
-|---|---|---|
-| **MCP Servers** | list | Configured servers + live auth status; re-authenticate via `/mcp`. |
-| **Skills** | list | Manage your custom slash-command skills — edit, enable/disable, create. |
-| **Usage** | list | Estimated tokens & cost per session (today vs earlier), at API rates. |
-| **Claude Code Config** | list | Edit settings / CLAUDE.md, inspect hooks / plugins, set model, run `doctor`, show version. |
+|  | Command | Mode | What it does |
+|:-:|---|---|---|
+| <img src="extension/assets/cmd/mcp.svg" width="28"> | **MCP Servers** | list | Configured servers + live auth status; re-authenticate via `/mcp`. |
+| <img src="extension/assets/cmd/skills.svg" width="28"> | **Skills** | list | Manage your custom slash-command skills — edit, enable/disable, create. |
+| <img src="extension/assets/cmd/usage.svg" width="28"> | **Usage** | list | Estimated tokens & cost per session (today vs earlier), at API rates. |
+| <img src="extension/assets/cmd/claude-config.svg" width="28"> | **Claude Code Config** | list | Edit settings / CLAUDE.md, inspect hooks / plugins, set model, run `doctor`, show version. |
 
 > Repo pickers (Review PR · New Session · Spawn) are recency-sorted: your **local** repos first,
 > then everything you can access on **GitHub** — remote picks are cloned on demand.
