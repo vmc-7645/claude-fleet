@@ -6,6 +6,12 @@
 // — one branch lives in exactly one worktree, so that fragment pins the tab
 // deterministically, without depending on the (truncated, sometimes aiTitle-vs-
 // prompt-mismatched) task text. Task agreement is only a tie-breaker.
+//
+// Fallback: a tab may instead show Claude Code's OWN title, "<glyph> <aiTitle>"
+// (no repo:branch) — e.g. a session started before the tab-status hook was
+// installed, or a moment when Claude re-asserted its title between hook events.
+// Claude's title is verbatim the session aiTitle, which is also the agent title
+// the extension uses for hook-less sessions, so we match the whole title body.
 
 export interface AgentTab {
   repo: string; // basename(cwd)
@@ -78,5 +84,26 @@ export function tabMatchScore(a: AgentTab, title: string): number {
     (title.endsWith(a.repo) && boundaryBefore(title, title.length - a.repo.length));
   if (repoPresent && taskAgrees(a.task, title)) return 2;
 
+  // Last resort: the tab is Claude's own "<glyph> <aiTitle>" title with no
+  // repo:branch. Match the whole body against the agent title. Strict (exact or
+  // full-prefix, length-gated) since there's no repo to disambiguate.
+  if (bodyAgrees(a.task, title)) return 1;
+
   return 0;
+}
+
+// Strip a leading status glyph / spinner (any run of non-letter/digit chars)
+// to recover the aiTitle body from "<glyph> <aiTitle>".
+function titleBody(title: string): string {
+  return normTask(title.replace(/^[^\p{L}\p{N}]+/u, ""));
+}
+
+// Agreement for the no-repo fallback: exact, or one a full prefix of the other,
+// with a high min length so unrelated titles can't collide.
+function bodyAgrees(task: string | undefined, title: string): boolean {
+  const x = normTask(task);
+  const y = titleBody(title);
+  if (x.length < 10 || y.length < 10) return false;
+  const [short, long] = x.length <= y.length ? [x, y] : [y, x];
+  return long.startsWith(short);
 }
