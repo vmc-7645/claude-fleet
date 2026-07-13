@@ -38,21 +38,63 @@ export default function Command() {
     load();
   }, []);
 
+  async function openMcp() {
+    await closeMainWindow();
+    try {
+      await openMcpAuth();
+      await showHUD("Opening Claude /mcp");
+    } catch (e) {
+      await showHUD(`❌ ${String(e).slice(0, 80)}`);
+    }
+  }
+
   const needAuth = servers.filter((s) => s.needsAuth);
   const ok = servers.filter((s) => !s.needsAuth);
 
   return (
     <List isLoading={isLoading} searchBarPlaceholder="Search MCP servers…">
-      <List.Section title={`Needs auth (${needAuth.length})`}>
-        {needAuth.map((s) => (
-          <McpItem key={s.name} s={s} reload={load} />
-        ))}
-      </List.Section>
-      <List.Section title={`Connected (${ok.length})`}>
-        {ok.map((s) => (
-          <McpItem key={s.name} s={s} reload={load} />
-        ))}
-      </List.Section>
+      {/* `claude mcp list` runs a health check (~seconds), so show a clear state
+          instead of a blank list while it loads or if it comes back empty. */}
+      {servers.length === 0 ? (
+        <List.EmptyView
+          icon={isLoading ? Icon.Clock : Icon.Plug}
+          title={isLoading ? "Checking MCP servers…" : "No MCP servers"}
+          description={
+            isLoading
+              ? "Running `claude mcp list` — this includes a live health check."
+              : "`claude mcp list` returned nothing. Add one with `claude mcp add`, or open /mcp."
+          }
+          actions={
+            isLoading ? undefined : (
+              <ActionPanel>
+                <Action
+                  title="Open /mcp in Terminal"
+                  icon={Icon.Terminal}
+                  onAction={openMcp}
+                />
+                <Action
+                  title="Refresh"
+                  icon={Icon.ArrowClockwise}
+                  onAction={load}
+                />
+              </ActionPanel>
+            )
+          }
+        />
+      ) : (
+        <>
+          <List.Section title={`Needs auth (${needAuth.length})`}>
+            {needAuth.map((s) => (
+              <McpItem key={s.name} s={s} reload={load} />
+            ))}
+          </List.Section>
+          <List.Section title={`Connected (${ok.length})`}>
+            {ok.map((s) => (
+              <McpItem key={s.name} s={s} reload={load} />
+            ))}
+          </List.Section>
+        </>
+      )}
     </List>
   );
 }
