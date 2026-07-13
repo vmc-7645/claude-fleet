@@ -93,16 +93,32 @@ export function listRepos(overrideRoot?: string): Repo[] {
   return out.slice(0, MAX_REPOS);
 }
 
+function hasGit(dir: string): boolean {
+  return existsSync(join(dir, ".git"));
+}
+
+// Local path for a repo. For "owner/name", prefer a collision-disambiguated
+// "<owner>-<name>" clone (see cloneRepo) before the bare "<name>" dir, so a
+// second owner's same-named repo resolves to its own checkout. (The bare dir
+// isn't origin-verified here — that would need a git call in a sync render path
+// — but cloneRepo namespaces the colliding one, which this then finds.)
 export function repoPath(
   nameOrOwnerRepo: string,
   overrideRoot?: string,
 ): string | undefined {
   const { root } = reposConfig(overrideRoot);
-  const name = nameOrOwnerRepo.includes("/")
-    ? nameOrOwnerRepo.split("/").pop()!
-    : nameOrOwnerRepo;
-  const p = join(root, name);
-  return existsSync(join(p, ".git")) ? p : undefined;
+  if (nameOrOwnerRepo.includes("/")) {
+    const [owner, name] = [
+      nameOrOwnerRepo.split("/")[0],
+      nameOrOwnerRepo.split("/").pop()!,
+    ];
+    const disambig = join(root, `${owner}-${name}`);
+    if (hasGit(disambig)) return disambig;
+    const plain = join(root, name);
+    return hasGit(plain) ? plain : undefined;
+  }
+  const p = join(root, nameOrOwnerRepo);
+  return hasGit(p) ? p : undefined;
 }
 
 interface RawRemote {
@@ -114,21 +130,28 @@ interface RawRemote {
 // Every repo you can access on GitHub (owned, collaborator, org member), most
 // recently pushed first. One `gh api` call; capped so a huge account stays sane.
 export async function listRemoteRepos(): Promise<RemoteRepo[]> {
-  let out: string;
-  try {
-    out = await run("gh", [
-      "api",
-      "--paginate",
-      "/user/repos?per_page=100&sort=pushed&affiliation=owner,collaborator,organization_member",
-    ]);
-  } catch {
-    return []; // not authed / offline — remote tier just stays empty
-  }
-  let rows: RawRemote[] = [];
-  try {
-    rows = JSON.parse(out) as RawRemote[]; // gh merges paginated arrays into one
-  } catch {
-    return [];
+  // Bounded to 3 pages (= MAX_REMOTE), so a huge account can't trigger an
+  // unbounded `--paginate` sweep. Most-recently-pushed first; on any failure we
+  // just use what we've fetched so far.
+  const rows: RawRemote[] = [];
+  for (let page = 1; page <= MAX_REMOTE / 100; page++) {
+    let out: string;
+    try {
+      out = await run("gh", [
+        "api",
+        `/user/repos?per_page=100&page=${page}&sort=pushed&affiliation=owner,collaborator,organization_member`,
+      ]);
+    } catch {
+      break; // not authed / offline / rate-limited
+    }
+    let chunk: RawRemote[];
+    try {
+      chunk = JSON.parse(out) as RawRemote[];
+    } catch {
+      break;
+    }
+    rows.push(...chunk);
+    if (chunk.length < 100) break; // last page
   }
   return rows
     .filter((r) => r.full_name)
@@ -142,16 +165,43 @@ export async function listRemoteRepos(): Promise<RemoteRepo[]> {
 }
 
 // Clone a remote repo into the repos root (idempotent) and return its local path.
+// owner/name of a git remote URL (https or ssh, optional .git), lowercased.
+function repoSlug(url: string): string {
+  const m = url
+    .trim()
+    .replace(/\.git$/, "")
+    .match(/[/:]([^/:]+\/[^/:]+)$/);
+  return m ? m[1].toLowerCase() : "";
+}
+
+async function originIs(dir: string, nameWithOwner: string): Promise<boolean> {
+  try {
+    const url = await run("git", ["-C", dir, "remote", "get-url", "origin"]);
+    return repoSlug(url) === nameWithOwner.toLowerCase();
+  } catch {
+    return false;
+  }
+}
+
 export async function cloneRepo(
   nameWithOwner: string,
   overrideRoot?: string,
 ): Promise<string> {
   const { root } = reposConfig(overrideRoot);
+  const owner = nameWithOwner.split("/")[0];
   const name = nameWithOwner.split("/").pop()!;
-  const target = join(root, name);
-  if (existsSync(join(target, ".git"))) return target; // already have it
-  await run("gh", ["repo", "clone", nameWithOwner, target]);
-  return target;
+  const plain = join(root, name);
+  if (existsSync(join(plain, ".git"))) {
+    if (await originIs(plain, nameWithOwner)) return plain; // same repo → reuse
+    // Collision: a different owner's same-named repo occupies root/<name>. Put
+    // this one in root/<owner>-<name> so they don't clobber each other.
+    const disambig = join(root, `${owner}-${name}`);
+    if (existsSync(join(disambig, ".git"))) return disambig;
+    await run("gh", ["repo", "clone", nameWithOwner, disambig]);
+    return disambig;
+  }
+  await run("gh", ["repo", "clone", nameWithOwner, plain]);
+  return plain;
 }
 
 // Resolve a dropdown value to a local path. Bare name → existing local repo;

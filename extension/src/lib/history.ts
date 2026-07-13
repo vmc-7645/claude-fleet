@@ -65,6 +65,19 @@ const EMPTY = (sessionId: string): TranscriptMeta => ({
   cacheWriteTokens: 0,
 });
 
+// A user row is a real turn only if it carries actual user input. Claude Code
+// also writes tool RESULTS as type:"user" rows (content = tool_result blocks),
+// which shouldn't inflate the turn count.
+function isUserTurn(message: unknown): boolean {
+  const content = (message as { content?: unknown } | undefined)?.content;
+  if (typeof content === "string") return content.trim().length > 0;
+  if (Array.isArray(content))
+    return content.some(
+      (b) => b && (b as { type?: string }).type !== "tool_result",
+    );
+  return false;
+}
+
 function parseTranscript(path: string, sessionId: string): TranscriptMeta {
   const meta = EMPTY(sessionId);
   let content = "";
@@ -82,7 +95,7 @@ function parseTranscript(path: string, sessionId: string): TranscriptMeta {
       continue;
     }
     if (!meta.cwd && typeof row.cwd === "string") meta.cwd = row.cwd;
-    if (row.type === "user") meta.turns++;
+    if (row.type === "user" && isUserTurn(row.message)) meta.turns++;
     if (row.type === "ai-title" && typeof row.aiTitle === "string") {
       if (row.sessionId === sessionId || !meta.title) meta.title = row.aiTitle;
     }

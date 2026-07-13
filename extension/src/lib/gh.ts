@@ -45,7 +45,9 @@ export async function searchMyPRs(): Promise<PR[]> {
   }));
 }
 
-export type CiStatus = "pass" | "fail" | "pending" | "none";
+// "none" = the PR genuinely has no checks; "unknown" = we couldn't fetch them
+// (gh failed / offline) — the two must not look alike.
+export type CiStatus = "pass" | "fail" | "pending" | "none" | "unknown";
 
 interface RollupCheck {
   conclusion?: string;
@@ -94,7 +96,7 @@ export async function prCiStatus(
     }
     return pending ? "pending" : "pass";
   } catch {
-    return "none";
+    return "unknown"; // couldn't fetch — distinct from a PR with no checks
   }
 }
 

@@ -70,13 +70,20 @@ function itermScript(typed: string): string {
   ].join("\n");
 }
 
-// Apple Terminal: ⌘T for a new tab in the front window, then run in it.
+// Apple Terminal: new tab in the front window (or a new window if none is open),
+// then run in it. `do script` with no target opens a fresh window+tab.
 function terminalScript(typed: string): string {
   return [
-    'tell application "Terminal" to activate',
-    'tell application "System Events" to keystroke "t" using {command down}',
-    "delay 0.4",
-    `tell application "Terminal" to do script ${asStr(typed)} in front window`,
+    'tell application "Terminal"',
+    "  activate",
+    "  if (count of windows) is 0 then",
+    `    do script ${asStr(typed)}`,
+    "  else",
+    '    tell application "System Events" to keystroke "t" using {command down}',
+    "    delay 0.4",
+    `    do script ${asStr(typed)} in front window`,
+    "  end if",
+    "end tell",
   ].join("\n");
 }
 

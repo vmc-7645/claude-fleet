@@ -76,8 +76,16 @@ function ciAccessory(ci?: CiStatus): List.Item.Accessory | undefined {
         icon: { source: Icon.Clock, tintColor: Color.Yellow },
         tooltip: "checks running",
       };
+    case "unknown":
+      return {
+        icon: {
+          source: Icon.QuestionMarkCircle,
+          tintColor: Color.SecondaryText,
+        },
+        tooltip: "checks status unavailable",
+      };
     default:
-      return undefined;
+      return undefined; // "none" → no accessory (PR genuinely has no checks)
   }
 }
 
