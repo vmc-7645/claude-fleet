@@ -39,12 +39,12 @@ export default function Command() {
   // Icon-only when nothing needs you (SPEC §18: badge = needs-you count).
   const title = needsYou.length > 0 ? String(needsYou.length) : undefined;
 
-  // Claude spark (Anthropic press kit): monochrome + auto light/dark when calm,
-  // brand clay when an agent is waiting on you. See assets/NOTICE.md.
-  const icon =
-    needsYou.length > 0
-      ? { source: "claude-spark-clay.svg" }
-      : { source: { light: "claude-spark-dark.svg", dark: "claude-spark-light.svg" } };
+  // Claude spark (Anthropic press kit), themed to the menu bar: dark glyph on a
+  // light bar, white on a dark bar. The count carries the "needs you" signal.
+  // See assets/NOTICE.md.
+  const icon = {
+    source: { light: "claude-spark-dark.svg", dark: "claude-spark-light.svg" },
+  };
 
   return (
     <MenuBarExtra icon={icon} title={title} tooltip="Claude agents">
