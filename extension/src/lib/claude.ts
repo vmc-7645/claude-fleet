@@ -229,18 +229,16 @@ export async function closeAgentTab(agent: Agent): Promise<boolean> {
   return true;
 }
 
-// Type a follow-up prompt into the agent's tab (focus it, then type + Return).
+// Type a follow-up into the agent's tab (focus it, then type + Return). Empty
+// text just presses Return — accept a default / submit, or answer a numbered
+// prompt by passing "1", "y", etc. Used by both Nudge and the Quick Reply presets.
 export async function nudgeAgent(agent: Agent, text: string): Promise<boolean> {
   const ok = await focusAgentTab(agent);
   if (!ok) return false;
-  await runAppleScript(
-    [
-      'tell application "System Events"',
-      `  keystroke ${asStr(text)}`,
-      "  key code 36",
-      "end tell",
-    ].join("\n"),
-  );
+  const lines = ['tell application "System Events"'];
+  if (text) lines.push(`  keystroke ${asStr(text)}`);
+  lines.push("  key code 36", "end tell");
+  await runAppleScript(lines.join("\n"));
   return true;
 }
 

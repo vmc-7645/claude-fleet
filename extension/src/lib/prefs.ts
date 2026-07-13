@@ -5,6 +5,7 @@ export interface Prefs {
   reposRoot?: string;
   primaryClick?: "focus" | "resume";
   terminalApp?: "ghostty" | "iterm" | "terminal";
+  quickReplies?: string;
 }
 
 export function prefs(): Prefs {

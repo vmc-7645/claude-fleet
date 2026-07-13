@@ -285,6 +285,24 @@ function AgentItem(props: {
     }
   }
 
+  // Canned follow-ups typed straight into the agent's tab. Empty string = just
+  // press Return (accept a default / submit).
+  const quickReplies = (
+    p.quickReplies ?? "Continue, Run the tests, Looks good — commit"
+  )
+    .split(/[,\n]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  async function quickReply(text: string, label: string) {
+    await closeMainWindow();
+    try {
+      const ok = await nudgeAgent(agent, text);
+      await showHUD(ok ? `${label} → ${agent.repo}` : "Tab not found");
+    } catch (e) {
+      await showHUD(`❌ ${String(e).slice(0, 80)}`);
+    }
+  }
+
   async function doStop() {
     if (!agent.pid) return;
     const ok = await confirmAlert({
@@ -407,6 +425,25 @@ function AgentItem(props: {
                 <>
                   {p.primaryClick === "resume" ? resumeAction : focusAction}
                   {p.primaryClick === "resume" ? focusAction : resumeAction}
+                  <ActionPanel.Submenu
+                    title="Quick Reply"
+                    icon={Icon.Reply}
+                    shortcut={{ modifiers: ["cmd"], key: "y" }}
+                  >
+                    {quickReplies.map((r) => (
+                      <Action
+                        key={r}
+                        title={r}
+                        icon={Icon.Text}
+                        onAction={() => quickReply(r, r)}
+                      />
+                    ))}
+                    <Action
+                      title="Press Enter ↵ (Accept Default)"
+                      icon={Icon.ArrowRight}
+                      onAction={() => quickReply("", "↵")}
+                    />
+                  </ActionPanel.Submenu>
                   <Action
                     title="Nudge / Send Prompt"
                     icon={Icon.Message}

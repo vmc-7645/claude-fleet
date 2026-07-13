@@ -47,6 +47,14 @@
       "description": "Override where repos are discovered. Blank = use ~/.config/claude-mac-tweaks/repos.env or ~/Repos.",
       "default": "",
       "required": false
+    },
+    {
+      "name": "quickReplies",
+      "type": "textfield",
+      "title": "Quick replies",
+      "description": "Comma-separated canned follow-ups for the Quick Reply action on a live agent (Ghostty only).",
+      "default": "Continue, Run the tests, Looks good — commit",
+      "required": false
     }
   ],
   "commands": [
