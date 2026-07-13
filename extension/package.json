@@ -78,84 +78,96 @@
       "title": "Agents",
       "subtitle": "Claude Fleet",
       "description": "See active and recent Claude agents; resume, fork, or jump to them.",
-      "mode": "view"
+      "mode": "view",
+      "icon": "cmd/agents.svg"
     },
     {
       "name": "my-prs",
       "title": "My PRs",
       "subtitle": "Claude Fleet",
       "description": "Your open PRs across repos; review any of them in Claude.",
-      "mode": "view"
+      "mode": "view",
+      "icon": "cmd/my-prs.svg"
     },
     {
       "name": "review-requests",
       "title": "PRs to Review",
       "subtitle": "Claude Fleet",
       "description": "Open PRs awaiting your review; hand any to claude /review.",
-      "mode": "view"
+      "mode": "view",
+      "icon": "cmd/review-requests.svg"
     },
     {
       "name": "spawn",
       "title": "Spawn Agent",
       "subtitle": "Claude Fleet",
       "description": "Spawn a Claude agent in a fresh worktree from a task.",
-      "mode": "view"
+      "mode": "view",
+      "icon": "cmd/spawn.svg"
     },
     {
       "name": "review-pr",
       "title": "Review PR",
       "subtitle": "Claude Fleet",
       "description": "Open Claude to review a PR in a chosen repo.",
-      "mode": "view"
+      "mode": "view",
+      "icon": "cmd/review-pr.svg"
     },
     {
       "name": "my-issues",
       "title": "My Issues",
       "subtitle": "Claude Fleet",
       "description": "Your open issues across repos; start an agent on one.",
-      "mode": "view"
+      "mode": "view",
+      "icon": "cmd/my-issues.svg"
     },
     {
       "name": "worktrees",
       "title": "Worktrees",
       "subtitle": "Claude Fleet",
       "description": "List git worktrees across your repos; open, resume, or remove.",
-      "mode": "view"
+      "mode": "view",
+      "icon": "cmd/worktrees.svg"
     },
     {
       "name": "mcp",
       "title": "MCP Servers",
       "subtitle": "Claude Fleet",
       "description": "List MCP servers + auth status; re-authenticate.",
-      "mode": "view"
+      "mode": "view",
+      "icon": "cmd/mcp.svg"
     },
     {
       "name": "skills",
       "title": "Skills",
       "subtitle": "Claude Fleet",
       "description": "Manage your custom slash-command skills.",
-      "mode": "view"
+      "mode": "view",
+      "icon": "cmd/skills.svg"
     },
     {
       "name": "usage",
       "title": "Usage",
       "subtitle": "Claude Fleet",
       "description": "Estimated tokens & cost per session.",
-      "mode": "view"
+      "mode": "view",
+      "icon": "cmd/usage.svg"
     },
     {
       "name": "claude-config",
       "title": "Claude Code Config",
       "subtitle": "Claude Fleet",
       "description": "Edit settings/CLAUDE.md, view hooks/plugins, set model, doctor, version.",
-      "mode": "view"
+      "mode": "view",
+      "icon": "cmd/claude-config.svg"
     },
     {
       "name": "new-session",
       "title": "New Session",
       "subtitle": "Claude Fleet",
       "description": "Start a fresh Claude session in a repo (no worktree).",
-      "mode": "view"
+      "mode": "view",
+      "icon": "cmd/new-session.svg"
     },
     {
       "name": "fleet-menu-bar",

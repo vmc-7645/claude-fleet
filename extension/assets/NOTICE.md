@@ -1,4 +1,14 @@
-# Third-party trademark notice
+# Third-party notices
+
+## Command glyphs (`cmd/*.svg`)
+
+The per-command icons composite the Claude base (below) with a glyph from
+[**Lucide**](https://lucide.dev) (`bot`, `git-pull-request`, `eye`, `bug`,
+`file-search`, `git-branch`, `rocket`, `square-terminal`, `plug`, `puzzle`,
+`coins`, `sliders-horizontal`), recolored. Lucide is **ISC-licensed** —
+copyright (c) Lucide Contributors.
+
+## Claude trademark
 
 `claude-spark-*.svg` and `icon.png` are Anthropic's **Claude** marks from the
 official [press kit](https://www.anthropic.com/news) ("Download press kit" →
