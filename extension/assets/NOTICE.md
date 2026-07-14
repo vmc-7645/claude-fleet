@@ -5,7 +5,8 @@
 The per-command icons composite the Claude base (below) with a glyph from
 [**Lucide**](https://lucide.dev) (`bot`, `git-pull-request`, `eye`, `bug`,
 `file-search`, `git-branch`, `rocket`, `square-terminal`, `plug`, `puzzle`,
-`coins`, `sliders-horizontal`), recolored. Lucide is **ISC-licensed** —
+`coins`, `sliders-horizontal`, `chevrons-right`), recolored. Lucide is
+**ISC-licensed** —
 copyright (c) Lucide Contributors.
 
 ## Claude trademark

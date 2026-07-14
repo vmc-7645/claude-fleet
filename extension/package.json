@@ -82,6 +82,15 @@
       "icon": "cmd/agents.svg"
     },
     {
+      "name": "next-agent",
+      "title": "Next Waiting Agent",
+      "subtitle": "Claude Fleet",
+      "description": "Focus the agent that's been waiting on you longest. Assign a hotkey; off by default.",
+      "mode": "no-view",
+      "disabledByDefault": true,
+      "icon": "cmd/next-agent.svg"
+    },
+    {
       "name": "my-prs",
       "title": "My PRs",
       "subtitle": "Claude Fleet",
