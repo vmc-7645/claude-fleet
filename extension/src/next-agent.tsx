@@ -6,25 +6,19 @@ import { showHUD, closeMainWindow } from "@raycast/api";
 import { loadAgents } from "./lib/rank";
 import { focusOrRaise } from "./lib/claude";
 import { focusSupported } from "./lib/terminal";
-import { Agent } from "./lib/types";
-
-// "Needs you" = active but not actively working, most urgent first
-// (waiting → done → idle), and within a state the one waiting longest.
-const RANK: Record<string, number> = { waiting: 0, done: 1, idle: 2 };
 
 export default async function Command() {
   if (!focusSupported()) {
     await showHUD("Focus needs Ghostty (set your terminal in preferences)");
     return;
   }
+  // Only agents blocked on you (state "waiting"). A busy session is derived as
+  // "working" (never "waiting"), so this can't focus an actively-working agent.
+  // done/idle aren't "waiting". Oldest wait first, to clear the backlog.
   const { active } = loadAgents();
   const next = active
-    .filter((a) => a.state !== "working")
-    .sort(
-      (a: Agent, b: Agent) =>
-        (RANK[a.state] ?? 3) - (RANK[b.state] ?? 3) ||
-        a.updatedAt - b.updatedAt,
-    )[0];
+    .filter((a) => a.state === "waiting")
+    .sort((a, b) => a.updatedAt - b.updatedAt)[0];
 
   if (!next) {
     await showHUD("✅ No agents waiting on you");
