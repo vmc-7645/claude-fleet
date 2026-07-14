@@ -25,7 +25,7 @@ export default function Command() {
     <List searchBarPlaceholder="Search skills / commands…">
       {skills.length === 0 && (
         <List.EmptyView
-          icon="🧩"
+          icon={{ source: Icon.Wand, tintColor: Color.Magenta }}
           title="No custom skills"
           description="Create one below."
         />
@@ -33,7 +33,11 @@ export default function Command() {
       {skills.map((s) => (
         <List.Item
           key={s.name}
-          icon={s.disabled ? Icon.CircleDisabled : "🧩"}
+          icon={
+            s.disabled
+              ? Icon.CircleDisabled
+              : { source: Icon.Wand, tintColor: Color.Magenta }
+          }
           title={`/${s.name}`}
           subtitle={s.description}
           accessories={

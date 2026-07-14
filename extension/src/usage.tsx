@@ -1,6 +1,6 @@
 // Usage — estimated tokens & cost per session, today vs earlier. SPEC (Manage).
 
-import { List } from "@raycast/api";
+import { List, Icon, Color } from "@raycast/api";
 import { useEffect, useState } from "react";
 import { basename } from "path";
 import { readTranscripts, TranscriptMeta } from "./lib/history";
@@ -33,7 +33,7 @@ export default function Command() {
   const Item = (r: TranscriptMeta) => (
     <List.Item
       key={r.sessionId}
-      icon="💰"
+      icon={{ source: Icon.Coins, tintColor: Color.Yellow }}
       title={basename(r.cwd) || "?"}
       subtitle={r.title}
       accessories={[
@@ -50,7 +50,7 @@ export default function Command() {
     >
       {!isLoading && rows.length === 0 && (
         <List.EmptyView
-          icon="💰"
+          icon={{ source: Icon.Coins, tintColor: Color.Yellow }}
           title="No usage yet"
           description="Sessions with token usage will show estimated cost here."
         />

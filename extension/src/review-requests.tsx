@@ -54,7 +54,7 @@ export default function Command() {
     >
       {!isLoading && prs.length === 0 && (
         <List.EmptyView
-          icon="👀"
+          icon={{ source: Icon.Eye, tintColor: Color.Red }}
           title="No PRs to review"
           description="Nothing is waiting on your review right now."
         />
@@ -124,7 +124,11 @@ function PRItem({ pr, ci }: { pr: PR; ci?: CiStatus }) {
 
   return (
     <List.Item
-      icon={pr.isDraft ? "📝" : "👀"}
+      icon={
+        pr.isDraft
+          ? { source: Icon.Pencil, tintColor: Color.SecondaryText }
+          : { source: Icon.Eye, tintColor: Color.Red }
+      }
       title={`#${pr.number}`}
       subtitle={pr.title}
       accessories={accessories}

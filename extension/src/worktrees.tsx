@@ -49,7 +49,7 @@ export default function Command() {
     <List isLoading={isLoading} searchBarPlaceholder="Search worktrees…">
       {!isLoading && wts.length === 0 && (
         <List.EmptyView
-          icon="🌳"
+          icon={{ source: Icon.Tree, tintColor: Color.Green }}
           title="No worktrees"
           description="Spawn an agent or Check Out & Work a PR to create one."
         />
@@ -110,7 +110,13 @@ function WtItem({ wt, onChange }: { wt: Worktree; onChange: () => void }) {
 
   return (
     <List.Item
-      icon={wt.isMain ? "🌳" : wt.merged ? "🍂" : "🌿"}
+      icon={
+        wt.isMain
+          ? { source: Icon.Tree, tintColor: Color.Green }
+          : wt.merged
+            ? { source: Icon.Leaf, tintColor: Color.Yellow }
+            : { source: Icon.Code, tintColor: Color.Green }
+      }
       title={wt.branch || basename(wt.path)}
       accessories={accessories}
       actions={

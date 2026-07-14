@@ -7,6 +7,7 @@ import {
   Action,
   Icon,
   Color,
+  Image,
   Form,
   showToast,
   Toast,
@@ -49,17 +50,17 @@ function timeAgo(ms: number): string {
   return `${Math.floor(h / 24)}d`;
 }
 
-function agentIcon(a: Agent): string {
-  if (!a.live) return "🕘";
+function agentIcon(a: Agent): Image.ImageLike {
+  if (!a.live) return { source: Icon.Clock, tintColor: Color.SecondaryText };
   switch (a.state) {
     case "working":
-      return "⚙️";
+      return { source: Icon.Gear, tintColor: Color.Blue };
     case "waiting":
-      return "🔔";
+      return { source: Icon.Bell, tintColor: Color.Orange };
     case "done":
-      return "✅";
+      return { source: Icon.CheckCircle, tintColor: Color.Green };
     default:
-      return "💤";
+      return { source: Icon.Moon, tintColor: Color.SecondaryText };
   }
 }
 
@@ -177,7 +178,7 @@ export default function Command() {
     >
       {empty && (
         <List.EmptyView
-          icon="🤖"
+          icon={{ source: Icon.Terminal, tintColor: Color.SecondaryText }}
           title="No Claude agents"
           description="Start one and it'll appear here."
         />

@@ -51,7 +51,7 @@ export default function Command() {
     <List isLoading={isLoading} searchBarPlaceholder="Search your open PRs…">
       {!isLoading && prs.length === 0 && (
         <List.EmptyView
-          icon="🔀"
+          icon={{ source: Icon.CodeBlock, tintColor: Color.Blue }}
           title="No open PRs"
           description="Your open pull requests across repos show up here."
         />
@@ -123,7 +123,11 @@ function PRItem({ pr, ci }: { pr: PR; ci?: CiStatus }) {
 
   return (
     <List.Item
-      icon={pr.isDraft ? "📝" : "🔀"}
+      icon={
+        pr.isDraft
+          ? { source: Icon.Pencil, tintColor: Color.SecondaryText }
+          : { source: Icon.CodeBlock, tintColor: Color.Blue }
+      }
       title={`#${pr.number}`}
       subtitle={pr.title}
       accessories={accessories}

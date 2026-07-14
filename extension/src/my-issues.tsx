@@ -6,6 +6,7 @@ import {
   ActionPanel,
   Action,
   Icon,
+  Color,
   showToast,
   Toast,
   showHUD,
@@ -41,7 +42,7 @@ export default function Command() {
     <List isLoading={isLoading} searchBarPlaceholder="Search your open issues…">
       {!isLoading && issues.length === 0 && (
         <List.EmptyView
-          icon="🐛"
+          icon={{ source: Icon.Bug, tintColor: Color.Green }}
           title="No open issues"
           description="Issues you've opened across your repos show up here."
         />
@@ -80,7 +81,7 @@ function IssueItem({ issue }: { issue: Issue }) {
 
   return (
     <List.Item
-      icon="🐛"
+      icon={{ source: Icon.Bug, tintColor: Color.Green }}
       title={`#${issue.number}`}
       subtitle={issue.title}
       accessories={[{ text: issue.repo }]}
