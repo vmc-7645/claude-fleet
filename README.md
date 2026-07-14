@@ -65,6 +65,12 @@ Thirteen commands, grouped by what you reach for.
 > Repo pickers (Review PR · New Session · Spawn) are recency-sorted: your **local** repos first,
 > then everything you can access on **GitHub** — remote picks are cloned on demand.
 
+## Screens
+
+<p align="center"><img src="docs/screens/commands.png" alt="Claude Fleet commands in Raycast search" width="760"></p>
+
+<p align="center"><sub>The Claude Fleet commands in Raycast.</sub></p>
+
 ## Setup
 
 **Prerequisites:** macOS · [Raycast](https://raycast.com) · [Claude Code](https://claude.com/claude-code) · [`gh`](https://cli.github.com) · `git` · `jq` · a terminal ([Ghostty](https://ghostty.org) recommended)
