@@ -159,12 +159,17 @@ export default function Command() {
       searchBarPlaceholder="Search agents by repo or title…"
       searchBarAccessory={
         <List.Dropdown tooltip="Scope" value={scope} onChange={setScope}>
-          <List.Dropdown.Item title="All" value="all" />
-          <List.Dropdown.Item title="Active" value="active" />
-          <List.Dropdown.Item title="Recent" value="recent" />
+          <List.Dropdown.Item icon={Icon.List} title="All" value="all" />
+          <List.Dropdown.Item icon={Icon.Bolt} title="Active" value="active" />
+          <List.Dropdown.Item icon={Icon.Clock} title="Recent" value="recent" />
           <List.Dropdown.Section title="Repo">
             {repos.map((r) => (
-              <List.Dropdown.Item key={r} title={r} value={`repo:${r}`} />
+              <List.Dropdown.Item
+                key={r}
+                icon={Icon.Folder}
+                title={r}
+                value={`repo:${r}`}
+              />
             ))}
           </List.Dropdown.Section>
         </List.Dropdown>

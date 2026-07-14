@@ -1,27 +1,36 @@
 // Fleet — ambient menu-bar indicator: a count of agents needing you + a roster.
 // Reads the same data as the Agents command. SPEC §5.5.
 
-import { MenuBarExtra, launchCommand, LaunchType, open } from "@raycast/api";
+import {
+  MenuBarExtra,
+  Icon,
+  Color,
+  Image,
+  launchCommand,
+  LaunchType,
+  open,
+} from "@raycast/api";
 import { loadAgents } from "./lib/rank";
 import { Agent } from "./lib/types";
 import { focusOrRaise } from "./lib/claude";
 
-function icon(a: Agent): string {
+// Clean, unstyled state icons for the dropdown rows (no logo/outline).
+function stateIcon(a: Agent): Image.ImageLike {
   switch (a.state) {
     case "working":
-      return "⚙️";
+      return { source: Icon.Gear, tintColor: Color.Blue };
     case "waiting":
-      return "🔔";
+      return { source: Icon.Bell, tintColor: Color.Orange };
     case "done":
-      return "✅";
+      return { source: Icon.CheckCircle, tintColor: Color.Green };
     default:
-      return "💤";
+      return { source: Icon.Moon, tintColor: Color.SecondaryText };
   }
 }
 
 function label(a: Agent): string {
   const t = a.title ? ` — ${a.title}` : "";
-  return `${icon(a)} ${a.repo}${t}`;
+  return `${a.repo}${t}`;
 }
 
 export default function Command() {
@@ -52,6 +61,7 @@ export default function Command() {
         {needsYou.map((a) => (
           <MenuBarExtra.Item
             key={a.sessionId}
+            icon={stateIcon(a)}
             title={label(a)}
             subtitle={
               a.state === "waiting" && a.stateReason ? a.stateReason : undefined
@@ -65,6 +75,7 @@ export default function Command() {
         {working.map((a) => (
           <MenuBarExtra.Item
             key={a.sessionId}
+            icon={stateIcon(a)}
             title={label(a)}
             subtitle={a.lastTool}
             onAction={() => focusOrRaise(a)}
@@ -75,18 +86,21 @@ export default function Command() {
       <MenuBarExtra.Section>
         <MenuBarExtra.Item
           title="Open Agents…"
+          icon={Icon.AppWindowList}
           onAction={() =>
             launchCommand({ name: "agents", type: LaunchType.UserInitiated })
           }
         />
         <MenuBarExtra.Item
           title="New Agent…"
+          icon={Icon.Plus}
           onAction={() =>
             launchCommand({ name: "spawn", type: LaunchType.UserInitiated })
           }
         />
         <MenuBarExtra.Item
           title="Fleet folder"
+          icon={Icon.Folder}
           onAction={() => open(`${process.env.HOME}/.claude/fleet`)}
         />
       </MenuBarExtra.Section>
