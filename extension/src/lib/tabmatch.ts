@@ -145,6 +145,11 @@ function leadingEmojiMatches(title: string, state?: AgentState): boolean {
   return title.trimStart().startsWith(STATE_EMOJI[state]);
 }
 
+// A tab whose leading glyph marks it as an actively-working agent.
+function isWorkingTab(title: string): boolean {
+  return title.trimStart().startsWith(STATE_EMOJI.working);
+}
+
 // Pick the best-matching candidate for an agent, or null. Ranking:
 //   1. highest tabMatchScore — task agreement already lifts repo:branch 3→4
 //   2. leading status-emoji matches the agent's state — breaks the tie when two
@@ -161,6 +166,11 @@ export function chooseTab(
   for (const c of candidates) {
     const score = tabMatchScore(id, c.title);
     if (score <= 0) continue;
+    // When targeting a non-working agent, never land on an actively-working
+    // agent's tab — several agents can share one repo:branch (same repo dir),
+    // and the working one shouldn't win just because its title carries the
+    // repo:branch while the target's shows Claude's own (aiTitle) title.
+    if (id.state && id.state !== "working" && isWorkingTab(c.title)) continue;
     const emoji = leadingEmojiMatches(c.title, id.state);
     const wins =
       !best ||

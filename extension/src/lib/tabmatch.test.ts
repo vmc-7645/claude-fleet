@@ -152,4 +152,20 @@ describe("chooseTab", () => {
     const t = cand("💤 myrepo:feat/x — same", { kind: "T", tab: 3 });
     expect(chooseTab(id, [w, t])?.kind).toBe("T");
   });
+
+  it("won't land on a working (⚙️) tab when the target agent isn't working", () => {
+    // Two agents in the same repo dir: one working (its tab carries repo:branch,
+    // score 3), the target is done (its tab shows Claude's own aiTitle, score 1).
+    const id: AgentTab = {
+      repo: "myrepo",
+      branch: "main",
+      task: "Review the parser fix",
+      state: "done",
+    };
+    const working = cand("⚙️ myrepo:main — doing something else entirely", {
+      tab: 1,
+    });
+    const done = cand("✳ Review the parser fix and merge", { tab: 2 });
+    expect(chooseTab(id, [working, done])?.tab).toBe(2);
+  });
 });

@@ -12,16 +12,22 @@ export default async function Command() {
     await showHUD("Focus needs Ghostty (set your terminal in preferences)");
     return;
   }
-  // Only agents blocked on you (state "waiting"). A busy session is derived as
-  // "working" (never "waiting"), so this can't focus an actively-working agent.
-  // done/idle aren't "waiting". Oldest wait first, to clear the backlog.
+  // Agents that need you = active but not actively working. Most urgent first
+  // (waiting on permission > done > idle), oldest within a state. A busy session
+  // derives as "working" and is excluded; the tab matcher also refuses to focus
+  // a working agent's tab when the target isn't working (same-repo agents).
+  const RANK: Record<string, number> = { waiting: 0, done: 1, idle: 2 };
   const { active } = loadAgents();
   const next = active
-    .filter((a) => a.state === "waiting")
-    .sort((a, b) => a.updatedAt - b.updatedAt)[0];
+    .filter((a) => a.state !== "working")
+    .sort(
+      (a, b) =>
+        (RANK[a.state] ?? 3) - (RANK[b.state] ?? 3) ||
+        a.updatedAt - b.updatedAt,
+    )[0];
 
   if (!next) {
-    await showHUD("✅ No agents waiting on you");
+    await showHUD("✅ No agents need you right now");
     return;
   }
   await closeMainWindow();
