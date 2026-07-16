@@ -5,14 +5,17 @@
 // aren't re-read (SPEC §6.2, §9).
 
 import {
+  closeSync,
   existsSync,
+  openSync,
+  readSync,
   readdirSync,
-  readFileSync,
   statSync,
   unlinkSync,
 } from "fs";
 import { homedir } from "os";
 import { join } from "path";
+import { StringDecoder } from "string_decoder";
 
 export interface TranscriptMeta {
   sessionId: string;
@@ -78,21 +81,54 @@ function isUserTurn(message: unknown): boolean {
   return false;
 }
 
+// Read a file line by line, holding only one chunk plus one line at a time.
+// Transcripts reach tens of MB; readFileSync + split("\n") materializes the
+// whole file (plus a line array) at once, which overflows the menu-bar worker's
+// heap once the Raycast runtime's own baseline is loaded. SPEC §9.
+function eachLine(path: string, onLine: (line: string) => void): void {
+  const CHUNK = 1 << 18; // 256 KB
+  let fd: number;
+  try {
+    fd = openSync(path, "r");
+  } catch {
+    return;
+  }
+  const buf = Buffer.allocUnsafe(CHUNK);
+  // A multi-byte UTF-8 char can straddle a chunk boundary; StringDecoder holds
+  // the partial bytes back until the next chunk completes them, where a plain
+  // buf.toString() would emit U+FFFD and corrupt the JSON.
+  const decoder = new StringDecoder("utf8");
+  let tail = "";
+  try {
+    for (;;) {
+      const n = readSync(fd, buf, 0, CHUNK, null);
+      if (n <= 0) break;
+      const text = tail + decoder.write(buf.subarray(0, n));
+      let start = 0;
+      for (;;) {
+        const nl = text.indexOf("\n", start);
+        if (nl === -1) break;
+        onLine(text.slice(start, nl));
+        start = nl + 1;
+      }
+      tail = text.slice(start);
+    }
+    tail += decoder.end();
+    if (tail) onLine(tail);
+  } finally {
+    closeSync(fd);
+  }
+}
+
 function parseTranscript(path: string, sessionId: string): TranscriptMeta {
   const meta = EMPTY(sessionId);
-  let content = "";
-  try {
-    content = readFileSync(path, "utf8");
-  } catch {
-    return meta;
-  }
-  for (const line of content.split("\n")) {
-    if (!line) continue;
+  eachLine(path, (line) => {
+    if (!line) return;
     let row: Record<string, unknown>;
     try {
       row = JSON.parse(line);
     } catch {
-      continue;
+      return;
     }
     if (!meta.cwd && typeof row.cwd === "string") meta.cwd = row.cwd;
     if (row.type === "user" && isUserTurn(row.message)) meta.turns++;
@@ -116,7 +152,7 @@ function parseTranscript(path: string, sessionId: string): TranscriptMeta {
         }
       }
     }
-  }
+  });
   return meta;
 }
 
