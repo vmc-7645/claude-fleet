@@ -237,5 +237,25 @@ export function chooseTab(
       bestEmoji = emoji;
     }
   }
-  return best;
+  if (best) return best;
+
+  // Branch-drift fallback: nothing matched (repo:branch went stale because the
+  // agent's live branch changed since the tab-status hook last set the title,
+  // and the task text didn't agree either). Fall back to the tab that carries
+  // this agent's repo — but only when it's UNAMBIGUOUS, so we never guess among
+  // several same-repo agents: a single repo tab, or a single one whose leading
+  // status emoji matches the agent's state.
+  const repoTabs = candidates.filter(
+    (c) =>
+      titleHasRepo(c.title, id.repo) &&
+      !(id.state && id.state !== "working" && isWorkingTab(c.title)),
+  );
+  if (repoTabs.length === 1) return repoTabs[0];
+  if (repoTabs.length > 1 && id.state) {
+    const byEmoji = repoTabs.filter((c) =>
+      leadingEmojiMatches(c.title, id.state),
+    );
+    if (byEmoji.length === 1) return byEmoji[0];
+  }
+  return null;
 }
