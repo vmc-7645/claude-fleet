@@ -8,6 +8,7 @@ import { homedir } from "os";
 import { Agent } from "./types";
 import { run } from "./exec";
 import { AgentTab, TabCandidate, chooseTab } from "./tabmatch";
+import { enumerateGhostty, focusWindowTab } from "./ghostty";
 import {
   openTerminalTab,
   activateTerminalApp,
@@ -22,121 +23,6 @@ export async function resumeAgent(a: Agent): Promise<void> {
 
 export async function forkAgent(a: Agent): Promise<void> {
   await openTerminalTab(a.cwd, `claude --resume ${a.sessionId} --fork-session`);
-}
-
-// Focus the exact Ghostty window/tab for an agent by matching its title (which
-// the tab-status hook sets to "<emoji> <repo>[:<branch>] [— <task>]"). SPEC §8.
-//
-// We enumerate BOTH each window's title AND, when a window has a tab bar, each
-// tab's title. A single-tab Ghostty window has NO AXTabGroup (and thus no radio
-// buttons), so tabs-only enumeration misses it entirely — the window title is
-// how we find those. Emit "W|||<win>|||0|||<title>" per window and
-// "T|||<win>|||<tab>|||<title>" per tab.
-//
-// Find a window's tab group and bind it to `tg` (missing value if none). In a
-// normal window the AXTabGroup is a direct child; in a NATIVE-FULLSCREEN window
-// Ghostty nests it one level deeper (window → AXGroup → AXTabGroup), so a plain
-// `first tab group of w` finds nothing and every background tab becomes
-// invisible. Search depth 0, then depth 1. `wref` is the window expression.
-function findTabGroup(wref: string): string[] {
-  return [
-    "    set tg to missing value",
-    "    try",
-    `      set tg to first tab group of ${wref}`,
-    "    end try",
-    "    if tg is missing value then",
-    `      repeat with g in (UI elements of ${wref})`,
-    "        try",
-    "          set tg to first tab group of g",
-    "          exit repeat",
-    "        end try",
-    "      end repeat",
-    "    end if",
-  ];
-}
-
-// NOTE: avoid the `tab` keyword inside `tell process` — it shadows a UI-element
-// class and throws -10000. Each line carries a fullscreen flag ("1"/"0") so
-// focus can switch Spaces for a native-fullscreen window. Fields:
-// KIND|||win|||tab|||fs|||title.
-const ENUMERATE = [
-  'tell application "System Events"',
-  '  tell process "Ghostty"',
-  '    set out to ""',
-  "    set wc to count of windows",
-  "    repeat with wi from 1 to wc",
-  "      set w to window wi",
-  '      set wt to ""',
-  "      try",
-  "        set wt to title of w",
-  "      end try",
-  '      set fs to "0"',
-  "      try",
-  '        if (value of attribute "AXFullScreen" of w) is true then set fs to "1"',
-  "      end try",
-  '      set out to out & "W|||" & (wi as text) & "|||0|||" & fs & "|||" & wt & linefeed',
-  ...findTabGroup("w"),
-  "      if tg is not missing value then",
-  "        set ti to 0",
-  "        repeat with rb in (radio buttons of tg)",
-  "          set ti to ti + 1",
-  "          try",
-  '            set out to out & "T|||" & (wi as text) & "|||" & (ti as text) & "|||" & fs & "|||" & (title of rb) & linefeed',
-  "          end try",
-  "        end repeat",
-  "      end if",
-  "    end repeat",
-  "    return out",
-  "  end tell",
-  "end tell",
-].join("\n");
-
-// Focus a matched window/tab: make it the main window and raise it, press its
-// tab's radio button when it's one of several, then activate Ghostty. A native-
-// fullscreen window lives on its own Space, and activate/AXRaise do NOT switch
-// Spaces to it — pressing the app's Dock tile does, reliably — so we finish
-// with that only when the target is fullscreen.
-function focusScript(
-  win: number,
-  tab: number | null,
-  fullscreen: boolean,
-): string {
-  const lines = [
-    'tell application "System Events"',
-    '  tell process "Ghostty"',
-    "    try",
-    `      set value of attribute "AXMain" of window ${win} to true`,
-    "    end try",
-    `    perform action "AXRaise" of window ${win}`,
-  ];
-  if (tab !== null) {
-    // Same depth-0-or-1 search as enumeration, so fullscreen tabs press too.
-    lines.push(
-      ...findTabGroup(`window ${win}`),
-      "    if tg is not missing value then",
-      "      try",
-      `        perform action "AXPress" of (radio button ${tab} of tg)`,
-      "      end try",
-      "    end if",
-    );
-  }
-  lines.push(
-    "  end tell",
-    "end tell",
-    'tell application "Ghostty" to activate',
-  );
-  if (fullscreen) {
-    lines.push(
-      'tell application "System Events"',
-      '  tell process "Dock"',
-      "    try",
-      '      perform action "AXPress" of (first UI element of list 1 whose name is "Ghostty")',
-      "    end try",
-      "  end tell",
-      "end tell",
-    );
-  }
-  return lines.join("\n");
 }
 
 // The worktree's current branch — the strong, deterministic half of the match.
@@ -159,48 +45,40 @@ export async function focusAgentTab(agent: Agent): Promise<boolean> {
     state: agent.state,
   };
 
-  // Enumeration can hit a flaky System Events -10000; retry a few times.
-  let raw = "";
-  for (let attempt = 0; attempt < 4; attempt++) {
-    try {
-      raw = await runAppleScript(ENUMERATE);
-      if (raw.trim()) break;
-    } catch (e) {
-      console.error(
-        `[focus] enumerate attempt ${attempt} error: ${String(e).slice(0, 120)}`,
-      );
-    }
-  }
-
-  // Parse the enumeration into candidates; chooseTab ranks them (score, then
-  // status-emoji to disambiguate two agents on the same repo:branch, then T>W).
+  // Flatten the window/tab tree into candidates; chooseTab ranks them (score,
+  // then status-emoji to disambiguate two agents on the same repo:branch, then
+  // a real tab T over the window-title fallback W).
+  const windows = await enumerateGhostty();
   const candidates: TabCandidate[] = [];
-  for (const line of raw.split("\n")) {
-    if (!line.includes("|||")) continue;
-    const parts = line.split("|||");
-    if (parts.length < 5) continue;
-    const win = parseInt(parts[1], 10);
-    const tab = parseInt(parts[2], 10);
-    if (!Number.isFinite(win) || !Number.isFinite(tab)) continue;
+  for (const w of windows) {
     candidates.push({
-      kind: parts[0] === "T" ? "T" : "W",
-      win,
-      tab,
-      fs: parts[3] === "1",
-      title: parts.slice(4).join("|||"),
+      kind: "W",
+      win: w.index,
+      tab: 0,
+      fs: w.fs,
+      title: w.title,
     });
+    for (const t of w.tabs)
+      candidates.push({
+        kind: "T",
+        win: w.index,
+        tab: t.index,
+        fs: w.fs,
+        title: t.title,
+      });
   }
 
   const best = chooseTab(id, candidates);
   if (!best) return false; // no match → caller raises the terminal
-  try {
-    await runAppleScript(
-      focusScript(best.win, best.kind === "T" ? best.tab : null, best.fs),
-    );
-    return true;
-  } catch {
-    return false;
-  }
+  // Switch Spaces for a fullscreen target OR any background window (win !== 1):
+  // a background window may sit on another Space, which activate/AXRaise can't
+  // reach on their own.
+  const spaceSwitch = best.fs || best.win !== 1;
+  return focusWindowTab(
+    best.win,
+    best.kind === "T" ? best.tab : null,
+    spaceSwitch,
+  );
 }
 
 // Focus the agent's exact tab; fall back to just raising the terminal if no

@@ -6,6 +6,8 @@ export interface Prefs {
   primaryClick?: "focus" | "resume";
   terminalApp?: "ghostty" | "iterm" | "terminal";
   quickReplies?: string;
+  tabOpenMode?: "tab" | "window";
+  tabOpenDelay?: string; // seconds; textfield, parsed to a number
 }
 
 export function prefs(): Prefs {
