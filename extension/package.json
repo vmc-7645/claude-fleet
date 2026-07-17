@@ -93,8 +93,8 @@
       "name": "tabOpenDelay",
       "type": "textfield",
       "title": "Tab open delay (s)",
-      "description": "Ghostty only. Seconds to wait after opening a tab/window before typing the command — raise it if agents sometimes open in the right folder but don't start (keystrokes dropped before the shell is ready).",
-      "default": "0.7",
+      "description": "Ghostty only. Seconds to wait after opening a tab/window before the command is pasted in. Default 0.3 is tuned for the paste path; raise it only if an agent occasionally opens in the right folder but doesn't start.",
+      "default": "0.3",
       "required": false
     }
   ],
