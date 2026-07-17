@@ -22,7 +22,7 @@ import {
 import { useEffect, useState } from "react";
 import { loadAgents } from "./lib/rank";
 import { cleanupStaleFleet } from "./lib/fleet";
-import { deleteTranscript } from "./lib/history";
+import { deleteTranscriptAt } from "./lib/history";
 import { prefs } from "./lib/prefs";
 import { Agent } from "./lib/types";
 import { focusSupported } from "./lib/terminal";
@@ -403,7 +403,17 @@ function AgentItem(props: {
     <Action
       title="Focus Tab"
       icon={Icon.Window}
-      onAction={() => act(() => focusOrRaise(agent), `Focusing ${agent.repo}`)}
+      onAction={async () => {
+        await closeMainWindow();
+        // Honest HUD: focusOrRaise returns false when no exact tab matched and it
+        // only raised the terminal, so don't claim we focused the agent's tab.
+        const ok = await focusOrRaise(agent).catch(() => false);
+        await showHUD(
+          ok
+            ? `Focusing ${agent.repo}`
+            : `Raised terminal — no exact tab for ${agent.repo}`,
+        );
+      }}
     />
   );
   const resumeAction = (
@@ -501,7 +511,13 @@ function AgentItem(props: {
                     },
                   });
                   if (!ok) return;
-                  deleteTranscript(agent.sessionId);
+                  if (!deleteTranscriptAt(agent.transcriptPath || "")) {
+                    await showToast({
+                      style: Toast.Style.Failure,
+                      title: "Couldn't delete session",
+                      message: "Its transcript is already gone or unreadable.",
+                    });
+                  }
                   onRefresh();
                 }}
               />

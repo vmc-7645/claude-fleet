@@ -107,7 +107,9 @@ export async function focusWindowTab(
   } catch {
     return false;
   }
-  return true;
+  // Report whether the retry actually brought Ghostty forward, rather than
+  // claiming success unconditionally — the caller's HUD depends on it.
+  return await ghosttyFrontmost();
 }
 
 // Is Ghostty running at all? (A cold app needs a launch, not a keystroke.)

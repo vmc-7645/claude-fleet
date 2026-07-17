@@ -97,11 +97,28 @@ function hasGit(dir: string): boolean {
   return existsSync(join(dir, ".git"));
 }
 
+// Does `dir`'s git config reference `owner/name` in any remote URL? Used to
+// confirm the bare `<name>` dir is actually the repo we mean and not a different
+// owner's same-named checkout. Sync (read .git/config directly, no git spawn);
+// matches any remote so a fork with an `upstream` still resolves. No config /
+// no match → not this repo.
+function originMatches(dir: string, owner: string, name: string): boolean {
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  try {
+    const cfg = readFileSync(join(dir, ".git", "config"), "utf8");
+    return new RegExp(
+      `[:/]${esc(owner)}/${esc(name)}(\\.git)?(?:$|\\s|/)`,
+      "im",
+    ).test(cfg);
+  } catch {
+    return false;
+  }
+}
+
 // Local path for a repo. For "owner/name", prefer a collision-disambiguated
-// "<owner>-<name>" clone (see cloneRepo) before the bare "<name>" dir, so a
-// second owner's same-named repo resolves to its own checkout. (The bare dir
-// isn't origin-verified here — that would need a git call in a sync render path
-// — but cloneRepo namespaces the colliding one, which this then finds.)
+// "<owner>-<name>" clone (see cloneRepo); otherwise fall back to the bare
+// "<name>" dir ONLY when its git config references owner/name (originMatches),
+// so a second owner's same-named repo never resolves to the wrong checkout.
 export function repoPath(
   nameOrOwnerRepo: string,
   overrideRoot?: string,
@@ -114,8 +131,13 @@ export function repoPath(
     ];
     const disambig = join(root, `${owner}-${name}`);
     if (hasGit(disambig)) return disambig;
+    // The bare `<name>` dir is only ours if its origin points at owner/name —
+    // otherwise it's a different owner's same-named repo and we'd open the wrong
+    // one. Unverified (no config / mismatch) → treat as not cloned locally.
     const plain = join(root, name);
-    return hasGit(plain) ? plain : undefined;
+    return hasGit(plain) && originMatches(plain, owner, name)
+      ? plain
+      : undefined;
   }
   const p = join(root, nameOrOwnerRepo);
   return hasGit(p) ? p : undefined;

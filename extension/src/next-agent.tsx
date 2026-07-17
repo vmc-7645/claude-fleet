@@ -31,12 +31,10 @@ export default async function Command() {
     return;
   }
   await closeMainWindow();
-  const ok = await focusOrRaise(next)
-    .then(() => true)
-    .catch(() => false);
+  const ok = await focusOrRaise(next).catch(() => false);
   await showHUD(
     ok
       ? `→ ${next.repo}${next.title ? ` — ${next.title}` : ""}`
-      : "Tab not found",
+      : `Raised terminal — no exact tab for ${next.repo}`,
   );
 }

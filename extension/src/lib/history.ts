@@ -6,7 +6,6 @@
 
 import {
   closeSync,
-  existsSync,
   openSync,
   readSync,
   readdirSync,
@@ -19,6 +18,12 @@ import { StringDecoder } from "string_decoder";
 
 export interface TranscriptMeta {
   sessionId: string;
+  // The transcript file this was read from. A sessionId does NOT identify a file
+  // — the same id can exist under two project dirs — so anything that acts on a
+  // transcript (delete) must use this exact path, not re-resolve the id (which
+  // could pick the wrong file). One string per session is cheap on the menu-bar
+  // path; message text would not be (§9).
+  path: string;
   cwd: string;
   title: string;
   updatedAt: number; // mtime ms
@@ -54,8 +59,9 @@ function assistantText(content: unknown): string {
   return "";
 }
 
-const EMPTY = (sessionId: string): TranscriptMeta => ({
+const EMPTY = (sessionId: string, path: string): TranscriptMeta => ({
   sessionId,
+  path,
   cwd: "",
   title: "",
   updatedAt: 0,
@@ -121,7 +127,7 @@ function eachLine(path: string, onLine: (line: string) => void): void {
 }
 
 function parseTranscript(path: string, sessionId: string): TranscriptMeta {
-  const meta = EMPTY(sessionId);
+  const meta = EMPTY(sessionId, path);
   eachLine(path, (line) => {
     if (!line) return;
     let row: Record<string, unknown>;
@@ -156,26 +162,17 @@ function parseTranscript(path: string, sessionId: string): TranscriptMeta {
   return meta;
 }
 
-export function findTranscriptPath(sessionId: string): string | null {
-  let dirs: string[];
+// Delete a transcript by its EXACT path (TranscriptMeta.path / Agent
+// .transcriptPath). Deliberately path-based and with no id-based counterpart:
+// session ids aren't unique across project dirs, so resolving an id by scanning
+// (the old findTranscriptPath took the FIRST match while readTranscripts keys by
+// id so the LAST wins) could unlink a transcript the row wasn't about. An
+// irreversible op takes the path the row was built from, or nothing.
+export function deleteTranscriptAt(path: string): boolean {
+  if (!path) return false;
   try {
-    dirs = readdirSync(PROJECTS_DIR);
-  } catch {
-    return null;
-  }
-  for (const d of dirs) {
-    const p = join(PROJECTS_DIR, d, `${sessionId}.jsonl`);
-    if (existsSync(p)) return p;
-  }
-  return null;
-}
-
-export function deleteTranscript(sessionId: string): boolean {
-  const p = findTranscriptPath(sessionId);
-  if (!p) return false;
-  try {
-    unlinkSync(p);
-    cache.delete(p);
+    unlinkSync(path);
+    cache.delete(path);
     return true;
   } catch {
     return false;
