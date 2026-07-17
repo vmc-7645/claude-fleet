@@ -6,7 +6,7 @@
 import { ContextRecord } from "./contexts";
 
 export interface Query {
-  text: string; // free text, lowercased; "" = match everything
+  terms: string[]; // ALL must match (AND); a "quoted run" is one term
   branch?: string;
   repo?: string;
   live?: boolean;
@@ -20,33 +20,38 @@ export interface Match {
   where: "title" | "message" | "meta";
 }
 
-// Tokens are `key:value`; a bare word is free text. Values are lowercased for
-// comparison but a trailing `:` alone (a user mid-type) is treated as text, not
-// a filter, so the list doesn't blank out between keystrokes.
-const FILTER = /^(branch|repo|is|state):(.*)$/;
+// One token = an optional `key:` plus either a "quoted run" or a bare word.
+// Quotes are what let a value hold a space (`repo:"My Project"`, which the
+// dropdown relies on) and what lets you ask for a literal phrase
+// (`"retry backoff"`) now that bare words are ANDed rather than concatenated.
+const TOKEN = /([a-zA-Z]+):(?:"([^"]*)"|(\S+))|"([^"]*)"|(\S+)/g;
 
 export function parseQuery(input: string): Query {
-  const q: Query = { text: "" };
-  const words: string[] = [];
-  for (const raw of input.trim().split(/\s+/)) {
-    if (!raw) continue;
-    const m = raw.match(FILTER);
-    if (!m || !m[2]) {
-      words.push(raw);
+  const q: Query = { terms: [] };
+  for (const m of input.matchAll(TOKEN)) {
+    const [raw, rawKey, keyedQuoted, keyedBare, quoted, bare] = m;
+    const key = rawKey?.toLowerCase(); // `Branch:main` must work like `branch:`
+    const value = keyedQuoted ?? keyedBare;
+
+    if (key && value !== undefined) {
+      const v = value.toLowerCase();
+      if (key === "branch") q.branch = v;
+      else if (key === "repo") q.repo = v;
+      else if (key === "state") q.state = v;
+      else if (key === "is") {
+        if (v === "live") q.live = true;
+        else if (v === "idle" || v === "dead") q.live = false;
+        // An unknown is:… is text, not a silently dropped filter.
+        else q.terms.push(raw.toLowerCase());
+      } else q.terms.push(raw.toLowerCase()); // unknown key → plain text
       continue;
     }
-    const [, key, value] = m;
-    const v = value.toLowerCase();
-    if (key === "branch") q.branch = v;
-    else if (key === "repo") q.repo = v;
-    else if (key === "state") q.state = v;
-    else if (key === "is") {
-      if (v === "live") q.live = true;
-      else if (v === "idle" || v === "dead") q.live = false;
-      else words.push(raw); // unknown is:… — treat as text, not a silent no-op
-    }
+
+    // A bare `branch:` (mid-type) has no value and lands here as plain text, so
+    // the list doesn't blank out between keystrokes.
+    const text = quoted ?? bare;
+    if (text) q.terms.push(text.toLowerCase());
   }
-  q.text = words.join(" ").toLowerCase();
   return q;
 }
 
@@ -78,36 +83,71 @@ export function snippetAround(text: string, needle: string): string {
   return `${start > 0 ? "…" : ""}${body}${end < text.length ? "…" : ""}`;
 }
 
+function hasAll(hay: string, terms: string[]): boolean {
+  return terms.every((t) => hay.includes(t));
+}
+
+// Snippet around whichever term actually appears in this text.
+function snippetFor(text: string, terms: string[]): string {
+  const lower = text.toLowerCase();
+  const hit = terms.find((t) => lower.includes(t));
+  return hit ? snippetAround(text, hit) : "";
+}
+
 export function matchContext(q: Query, r: ContextRecord): Match | null {
   if (!passesFilters(q, r)) return null;
 
   // Filters with no free text: everything that passed is a hit, ranked by
   // recency alone (score 0 — the caller's recency tiebreak orders them).
-  if (!q.text) return { rec: r, score: 0, snippet: "", where: "meta" };
+  if (!q.terms.length) return { rec: r, score: 0, snippet: "", where: "meta" };
 
   const title = r.title.toLowerCase();
-  if (title.includes(q.text)) {
+  if (hasAll(title, q.terms)) {
     return { rec: r, score: 100, snippet: "", where: "title" };
   }
 
+  // Terms are ANDed, and the strongest hit is one message carrying all of them.
   // Your own words rank above Claude's: you remember what you asked for far
   // better than what came back.
   let best: Match | null = null;
+  const found = new Set(q.terms.filter((t) => title.includes(t)));
+  let firstHit = "";
+
   for (const m of r.messages) {
-    const at = m.text.toLowerCase().indexOf(q.text);
-    if (at === -1) continue;
+    const lower = m.text.toLowerCase();
+    let hits = 0;
+    for (const t of q.terms) {
+      if (!lower.includes(t)) continue;
+      found.add(t);
+      hits++;
+      if (!firstHit) firstHit = m.text;
+    }
+    if (hits < q.terms.length) continue;
     const score = m.role === "u" ? 60 : 40;
     if (!best || score > best.score) {
       best = {
         rec: r,
         score,
-        snippet: snippetAround(m.text, q.text),
+        snippet: snippetFor(m.text, q.terms),
         where: "message",
       };
       if (score === 60) break; // can't beat a user-message hit
     }
   }
-  return best;
+  if (best) return best;
+
+  // Terms scattered across the session still count — you remember discussing
+  // both things, not necessarily in one breath. Ranked below a single message
+  // that has them all.
+  if (found.size === q.terms.length) {
+    return {
+      rec: r,
+      score: 20,
+      snippet: snippetFor(firstHit, q.terms),
+      where: "message",
+    };
+  }
+  return null;
 }
 
 // Rank matches: score first, then recency. Returns a new array.

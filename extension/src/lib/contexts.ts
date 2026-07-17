@@ -29,7 +29,13 @@ export interface ContextMessage {
 
 export interface ContextRecord {
   sessionId: string;
-  root: string; // the session's cwd — see firstCwd() below
+  // The transcript this came from. Carried explicitly because a sessionId does
+  // NOT identify a file: the same id can exist under two project dirs (verified
+  // locally — one 1.3MB transcript and a 119-byte one share an id), so
+  // resolving a session by scanning for its id can find the wrong file. Delete
+  // uses this path, never a re-scan.
+  path: string;
+  root: string; // the session's cwd — see the FIRST-cwd rule in parse()
   repo: string;
   branches: string[]; // every branch the session touched, in first-seen order
   branch: string; // the one it ended on — what the row displays
@@ -48,12 +54,15 @@ const CACHE_DIR = join(homedir(), ".cache", "claude-fleet");
 const CACHE_FILE = join(CACHE_DIR, "contexts.json");
 
 // Bump when ContextRecord's shape changes — a stale-shaped cache is discarded
-// rather than half-read.
-const SCHEMA = 1;
+// rather than half-read. v2 added `path`.
+const SCHEMA = 2;
 
 // Transcripts are mostly tool results and file dumps; only ~4.5% of the bytes
-// are things a human said or read. Capping each message bounds the index (~4MB
-// over 238 sessions) while keeping every message searchable.
+// are things a human said or read. Capping bounds the index (~4MB over 238
+// sessions). The caps do bite a little — locally 927 messages are clipped at
+// MAX_MESSAGE and one session exceeds MAX_MESSAGES — so a hit late in a very
+// long session, or past 2KB into one message, isn't reachable. That's the
+// trade for a bounded index.
 const MAX_MESSAGE = 2000;
 const MAX_MESSAGES = 400;
 
@@ -118,6 +127,7 @@ function parse(
 ): ContextRecord {
   const rec: ContextRecord = {
     sessionId,
+    path,
     root: "",
     repo: "",
     branches: [],
@@ -296,6 +306,24 @@ export function buildIndex(): ContextRecord[] {
   }
   out.sort((a, b) => b.updatedAt - a.updatedAt);
   return out;
+}
+
+/**
+ * Delete a context's transcript, by its own path.
+ *
+ * NOT history.ts's deleteTranscript(sessionId), which resolves an id by
+ * scanning project dirs and taking the first match — ids are not unique across
+ * those dirs, so that can unlink a different session's file. Irreversible, so
+ * it deletes exactly the file this record was built from or nothing.
+ */
+export function deleteContext(rec: ContextRecord): boolean {
+  if (!rec.path) return false;
+  try {
+    unlinkSync(rec.path);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Drop the cache so the next buildIndex() re-reads every transcript. */

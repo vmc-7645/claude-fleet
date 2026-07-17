@@ -3,7 +3,7 @@
 // sort each group by recency. SPEC §6.3.
 
 import { basename } from "path";
-import { Agent, AgentState } from "./types";
+import { Agent, liveState } from "./types";
 import { readActiveSessions } from "./sessions";
 import { readTranscripts } from "./history";
 import { readFleetEntry } from "./fleet";
@@ -21,20 +21,7 @@ export function loadAgents(): { active: Agent[]; recent: Agent[] } {
     const m = metas.get(s.sessionId);
     const fleet = readFleetEntry(s.sessionId);
 
-    // Claude's busy = actively working. When Claude is idle, the fleet hook (if
-    // present) says which kind of idle: waiting-on-permission / done / idle.
-    let state: AgentState;
-    if (s.status === "busy") {
-      state = "working";
-    } else if (
-      fleet?.state === "waiting" ||
-      fleet?.state === "done" ||
-      fleet?.state === "idle"
-    ) {
-      state = fleet.state;
-    } else {
-      state = "idle";
-    }
+    const state = liveState(s.status === "busy", fleet?.state);
 
     return {
       sessionId: s.sessionId,

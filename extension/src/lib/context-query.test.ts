@@ -11,6 +11,7 @@ import { ContextRecord } from "./contexts";
 // text is what you and Claude actually said.
 const rec = (extra: Partial<ContextRecord> = {}): ContextRecord => ({
   sessionId: "s1",
+  path: "/p/s1.jsonl",
   root: "/Users/x/Dev/droyd2",
   repo: "droyd2",
   branches: ["main"],
@@ -26,7 +27,7 @@ const rec = (extra: Partial<ContextRecord> = {}): ContextRecord => ({
 describe("parseQuery", () => {
   it("splits filter tokens out of the free text", () => {
     expect(parseQuery("branch:feat/yam repo:droyd2 retry backoff")).toEqual({
-      text: "retry backoff",
+      terms: ["retry", "backoff"],
       branch: "feat/yam",
       repo: "droyd2",
     });
@@ -36,8 +37,13 @@ describe("parseQuery", () => {
     expect(parseQuery("branch:Main").branch).toBe("main");
   });
 
+  it("accepts a capitalized key (Branch: works like branch:)", () => {
+    expect(parseQuery("Branch:main").branch).toBe("main");
+    expect(parseQuery("IS:live").live).toBe(true);
+  });
+
   it("treats a bare key: with no value as text (user mid-type)", () => {
-    expect(parseQuery("branch:")).toEqual({ text: "branch:" });
+    expect(parseQuery("branch:")).toEqual({ terms: ["branch:"] });
   });
 
   it("maps is:live and is:idle to the live flag", () => {
@@ -46,15 +52,82 @@ describe("parseQuery", () => {
   });
 
   it("keeps an unknown is:… as text rather than silently ignoring it", () => {
-    expect(parseQuery("is:banana").text).toBe("is:banana");
+    expect(parseQuery("is:banana").terms).toEqual(["is:banana"]);
   });
 
-  it("returns empty text for an empty query", () => {
-    expect(parseQuery("   ").text).toBe("");
+  it("returns no terms for an empty query", () => {
+    expect(parseQuery("   ").terms).toEqual([]);
+  });
+
+  it("keeps a quoted value with a space intact (repo dirs may have spaces)", () => {
+    expect(parseQuery('repo:"My Project"')).toEqual({
+      terms: [],
+      repo: "my project",
+    });
+  });
+
+  it("treats a quoted run as one term (phrase search)", () => {
+    expect(parseQuery('"retry backoff"').terms).toEqual(["retry backoff"]);
+  });
+
+  it("keeps a value containing a colon (branch:feat:x)", () => {
+    expect(parseQuery("branch:feat:x").branch).toBe("feat:x");
   });
 });
 
 describe("matchContext", () => {
+  it("ANDs multiple words instead of matching them as one phrase", () => {
+    // The regression that mattered: "retry backoff" must find a message that
+    // says "add retry with backoff please".
+    const r = rec({
+      messages: [{ role: "u", text: "add retry with backoff" }],
+    });
+    expect(matchContext(parseQuery("retry backoff"), r)).not.toBeNull();
+    expect(matchContext(parseQuery("backoff retry"), r)).not.toBeNull();
+  });
+
+  it("ANDs across a newline", () => {
+    const r = rec({ messages: [{ role: "u", text: "retry\nbackoff" }] });
+    expect(matchContext(parseQuery("retry backoff"), r)).not.toBeNull();
+  });
+
+  it("requires every term — one miss excludes the row", () => {
+    const r = rec({ messages: [{ role: "u", text: "add retry" }] });
+    expect(matchContext(parseQuery("retry zebra"), r)).toBeNull();
+  });
+
+  it("a quoted phrase still demands the exact run", () => {
+    const r = rec({
+      messages: [{ role: "u", text: "add retry with backoff" }],
+    });
+    expect(matchContext(parseQuery('"retry backoff"'), r)).toBeNull();
+    expect(matchContext(parseQuery('"retry with backoff"'), r)).not.toBeNull();
+  });
+
+  it("ranks one message holding every term above terms scattered across the session", () => {
+    const together = rec({
+      messages: [{ role: "a", text: "retry and backoff" }],
+    });
+    const apart = rec({
+      messages: [
+        { role: "u", text: "retry" },
+        { role: "u", text: "backoff" },
+      ],
+    });
+    const a = matchContext(parseQuery("retry backoff"), together)!;
+    const b = matchContext(parseQuery("retry backoff"), apart)!;
+    expect(a.score).toBeGreaterThan(b.score);
+    expect(b).not.toBeNull(); // but scattered still counts
+  });
+
+  it("counts a term found in the title toward the AND", () => {
+    const r = rec({
+      title: "retry",
+      messages: [{ role: "u", text: "backoff" }],
+    });
+    expect(matchContext(parseQuery("retry backoff"), r)).not.toBeNull();
+  });
+
   it("matches a branch the session touched but did not end on", () => {
     // 84 of 237 real sessions span >1 branch; filtering on the final branch
     // alone would hide them.
@@ -79,8 +152,7 @@ describe("matchContext", () => {
   });
 
   it("returns every filtered row when there is no free text", () => {
-    const r = rec();
-    const m = matchContext(parseQuery("repo:droyd2"), r);
+    const m = matchContext(parseQuery("repo:droyd2"), rec());
     expect(m?.where).toBe("meta");
   });
 
@@ -101,8 +173,12 @@ describe("matchContext", () => {
   });
 
   it("is case-insensitive across title and messages", () => {
-    const r = rec({ title: "Retry Backoff" });
-    expect(matchContext(parseQuery("RETRY backoff"), r)).not.toBeNull();
+    expect(
+      matchContext(
+        parseQuery("RETRY backoff"),
+        rec({ title: "Retry Backoff" }),
+      ),
+    ).not.toBeNull();
   });
 
   it("carries a snippet for a message hit and none for a title hit", () => {
@@ -120,6 +196,12 @@ describe("matchContext", () => {
     expect(
       matchContext(parseQuery("is:live"), rec({ live: false })),
     ).toBeNull();
+  });
+
+  it("treats regex metacharacters as literal text", () => {
+    const r = rec({ messages: [{ role: "u", text: "cost is a.*b dollars" }] });
+    expect(matchContext(parseQuery("a.*b"), r)).not.toBeNull();
+    expect(matchContext(parseQuery("axxb"), r)).toBeNull();
   });
 });
 
@@ -158,5 +240,10 @@ describe("searchContexts", () => {
 
   it("returns everything for an empty query", () => {
     expect(searchContexts("", [rec(), rec()])).toHaveLength(2);
+  });
+
+  it("finds a row via the quoted value the dropdown injects", () => {
+    const r = rec({ repo: "My Project", root: "/Users/x/Dev/My Project" });
+    expect(searchContexts('repo:"My Project"', [r])).toHaveLength(1);
   });
 });

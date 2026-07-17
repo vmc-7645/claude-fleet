@@ -21,6 +21,7 @@ import {
   ContextRecord,
   buildIndex,
   clearIndex,
+  deleteContext,
   isOrphaned,
   shortPath,
 } from "./lib/contexts";
@@ -28,9 +29,8 @@ import { searchContexts } from "./lib/context-query";
 import { readActiveSessions } from "./lib/sessions";
 import { readFleetEntry } from "./lib/fleet";
 import { Worktree, listWorktrees } from "./lib/worktrees";
-import { deleteTranscript } from "./lib/history";
 import { prefs } from "./lib/prefs";
-import { Agent } from "./lib/types";
+import { Agent, AgentState, liveState } from "./lib/types";
 import {
   resumeAgent,
   forkAgent,
@@ -55,6 +55,7 @@ function timeAgo(ms: number): string {
 // that rebuilds rows can't drop them.
 interface Row extends ContextRecord {
   orphaned: boolean;
+  state?: AgentState; // narrowed by liveState(); never a raw hook string
 }
 
 function rowIcon(r: Row): Image.ImageLike {
@@ -71,7 +72,7 @@ function toAgent(r: Row): Agent {
     repo: r.repo,
     title: r.title,
     live: Boolean(r.live),
-    state: (r.state as Agent["state"]) || "idle",
+    state: r.state || "idle",
     updatedAt: r.updatedAt,
     turns: r.turns,
   };
@@ -97,11 +98,7 @@ export default function Command() {
           return {
             ...rec,
             live: Boolean(s),
-            state: s
-              ? s.status === "busy"
-                ? "working"
-                : fleet?.state || "idle"
-              : undefined,
+            state: s ? liveState(s.status === "busy", fleet?.state) : undefined,
             orphaned: isOrphaned(rec),
           };
         }),
@@ -191,7 +188,7 @@ export default function Command() {
                 key={b}
                 icon={Icon.Tree}
                 title={`${b} (${n})`}
-                value={`branch:${b}`}
+                value={`branch:"${b}"`}
               />
             ))}
           </List.Dropdown.Section>
@@ -201,7 +198,7 @@ export default function Command() {
                 key={r}
                 icon={Icon.Folder}
                 title={r}
-                value={`repo:${r}`}
+                value={`repo:"${r}"`}
               />
             ))}
           </List.Dropdown.Section>
@@ -227,7 +224,7 @@ export default function Command() {
       <List.Section title={`Contexts (${matches.length})`}>
         {matches.map((m) => (
           <ContextItem
-            key={m.rec.sessionId}
+            key={m.rec.path}
             row={m.rec as Row}
             wt={wts.get(m.rec.root)}
             snippet={m.snippet}
@@ -432,7 +429,7 @@ function ContextItem(props: {
                 },
               });
               if (!ok) return;
-              deleteTranscript(row.sessionId);
+              deleteContext(row);
               onRefresh();
             }}
           />
