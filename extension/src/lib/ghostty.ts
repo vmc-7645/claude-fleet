@@ -134,9 +134,14 @@ async function ghosttyRunning(): Promise<boolean> {
 async function typeCommand(typed: string): Promise<void> {
   await runAppleScript(
     [
-      'set savedClip to ""',
+      // Snapshot the WHOLE clipboard, not `the clipboard as text` — that throws
+      // on an image/file clipboard, leaving savedClip empty so the restore below
+      // WIPED whatever the user had copied. `the clipboard` round-trips text,
+      // images and file refs; missing value means we couldn't read it at all
+      // (then we don't restore, rather than clobber to empty).
+      "set savedClip to missing value",
       "try",
-      "  set savedClip to (the clipboard as text)",
+      "  set savedClip to the clipboard",
       "end try",
       `set the clipboard to ${asStr(typed)}`,
       "delay " + openDelay(),
@@ -144,10 +149,14 @@ async function typeCommand(typed: string): Promise<void> {
       "delay 0.15",
       'tell application "System Events" to key code 36',
       "delay 0.1",
-      "set the clipboard to savedClip",
+      "if savedClip is not missing value then set the clipboard to savedClip",
     ].join("\n"),
   );
 }
+
+// Sleep without spawning an `osascript` just to `delay` — saves a process spawn
+// (~50-100ms) per poll tick.
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // Terminal surfaces currently open (tabs; a single-tab window with no tab group
 // counts as 1). Order-independent so it survives the window re-ordering a raise
@@ -171,9 +180,12 @@ async function openSurface(key: "t" | "n", before: number): Promise<void> {
     );
     for (let i = 0; i < 12; i++) {
       if (countSurfaces(await enumerateGhostty()) > before) return;
-      await runAppleScript("delay 0.15");
+      await sleep(150);
     }
-    // No new surface — the ⌘ keystroke was likely dropped; loop retries once.
+    // Timed out. Re-check ONCE before retrying: the surface may have just
+    // appeared (heavy machine / AX lag), and firing a second ⌘T/⌘N would open a
+    // stray tab/window. Only retry if it genuinely didn't open.
+    if (countSurfaces(await enumerateGhostty()) > before) return;
   }
 }
 
@@ -188,7 +200,7 @@ async function openInNewWindow(typed: string): Promise<void> {
     for (let i = 0; i < 20; i++) {
       const wins = await enumerateGhostty();
       if (wins.length) break;
-      await runAppleScript("delay 0.25");
+      await sleep(250);
     }
     await runAppleScript('tell application "Ghostty" to activate');
     await typeCommand(typed);

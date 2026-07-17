@@ -59,7 +59,7 @@
       "name": "reposRoot",
       "type": "textfield",
       "title": "Repos directory",
-      "description": "Override where repos are discovered. Blank = use ~/.config/claude-mac-tweaks/repos.env or ~/Repos.",
+      "description": "Override where repos are discovered. Blank = use ~/.config/claude-fleet/repos.env or ~/Repos.",
       "default": "",
       "required": false
     },
