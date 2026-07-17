@@ -1,5 +1,7 @@
 // My PRs — cross-repo list of your open PRs with CI status; each row → Review in
-// Claude / Check out & work / Resume PR agent. SPEC §5.2.
+// Claude / Check out & work / Resume PR agent. The list is cached (instant open,
+// background revalidate), CI is fetched for every PR in one batched call, and a
+// repo Scope dropdown / repo-name search narrow it. SPEC §5.2.
 
 import {
   List,
@@ -12,52 +14,98 @@ import {
   showHUD,
   closeMainWindow,
 } from "@raycast/api";
-import { useEffect, useState } from "react";
-import { searchMyPRs, prCiStatus, PR, CiStatus } from "./lib/gh";
+import { useCachedPromise } from "@raycast/utils";
+import { useEffect, useMemo, useState } from "react";
+import { searchMyPRs, prCiStatuses, ciKey, PR, CiStatus } from "./lib/gh";
 import { reviewPR, checkoutAndWork, resumeFromPr } from "./lib/claude";
 import { repoPath } from "./lib/repos";
 import { prefs } from "./lib/prefs";
 
-export default function Command() {
-  const [prs, setPrs] = useState<PR[]>([]);
-  const [ci, setCi] = useState<Record<string, CiStatus>>({});
-  const [isLoading, setIsLoading] = useState(true);
+function shortRepo(repo: string): string {
+  return repo.split("/").pop() || repo;
+}
 
+export default function Command() {
+  const [scope, setScope] = useState("all");
+
+  const {
+    data: prs = [],
+    isLoading,
+    revalidate,
+  } = useCachedPromise(searchMyPRs, [], {
+    initialData: [] as PR[],
+    keepPreviousData: true,
+    onError: (e) => {
+      showToast({
+        style: Toast.Style.Failure,
+        title: "Failed to load PRs",
+        message: String(e),
+      });
+    },
+  });
+
+  // CI status for every PR in ONE batched gh call, refreshed whenever the list
+  // changes (CI is volatile, so it's fetched fresh rather than persisted).
+  const [ci, setCi] = useState<Map<string, CiStatus>>(new Map());
   useEffect(() => {
-    (async () => {
-      try {
-        const list = await searchMyPRs();
-        setPrs(list);
-        setIsLoading(false);
-        // CI status per PR, in parallel (one gh call each).
-        const entries = await Promise.all(
-          list.map(
-            async (p) => [p.url, await prCiStatus(p.repo, p.number)] as const,
-          ),
-        );
-        setCi(Object.fromEntries(entries));
-      } catch (e) {
-        await showToast({
-          style: Toast.Style.Failure,
-          title: "Failed to load PRs",
-          message: String(e),
-        });
-        setIsLoading(false);
-      }
-    })();
-  }, []);
+    if (prs.length === 0) return;
+    let cancelled = false;
+    prCiStatuses(prs)
+      .then((m) => {
+        if (!cancelled) setCi(m);
+      })
+      .catch(() => {
+        /* CI is best-effort; the list still works without it */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [prs]);
+
+  const repos = useMemo(() => {
+    const n = new Map<string, number>();
+    for (const p of prs) n.set(p.repo, (n.get(p.repo) || 0) + 1);
+    return [...n.entries()].sort(
+      (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
+    );
+  }, [prs]);
+
+  const shown = scope === "all" ? prs : prs.filter((p) => p.repo === scope);
 
   return (
-    <List isLoading={isLoading} searchBarPlaceholder="Search your open PRs…">
-      {!isLoading && prs.length === 0 && (
+    <List
+      isLoading={isLoading}
+      searchBarPlaceholder="Search by repo, #number, or title…"
+      searchBarAccessory={
+        <List.Dropdown tooltip="Repo" value={scope} onChange={setScope}>
+          <List.Dropdown.Item icon={Icon.List} title="All Repos" value="all" />
+          <List.Dropdown.Section title="Repo">
+            {repos.map(([repo, count]) => (
+              <List.Dropdown.Item
+                key={repo}
+                icon={Icon.Folder}
+                title={`${repo} (${count})`}
+                value={repo}
+              />
+            ))}
+          </List.Dropdown.Section>
+        </List.Dropdown>
+      }
+    >
+      {!isLoading && shown.length === 0 && (
         <List.EmptyView
           icon={{ source: Icon.CodeBlock, tintColor: Color.Blue }}
-          title="No open PRs"
+          title={scope === "all" ? "No open PRs" : "No PRs in this repo"}
           description="Your open pull requests across repos show up here."
         />
       )}
-      {prs.map((pr) => (
-        <PRItem key={pr.url} pr={pr} ci={ci[pr.url]} />
+      {shown.map((pr) => (
+        <PRItem
+          key={pr.url}
+          pr={pr}
+          ci={ci.get(ciKey(pr.repo, pr.number))}
+          onRefresh={revalidate}
+        />
       ))}
     </List>
   );
@@ -93,7 +141,15 @@ function ciAccessory(ci?: CiStatus): List.Item.Accessory | undefined {
   }
 }
 
-function PRItem({ pr, ci }: { pr: PR; ci?: CiStatus }) {
+function PRItem({
+  pr,
+  ci,
+  onRefresh,
+}: {
+  pr: PR;
+  ci?: CiStatus;
+  onRefresh: () => void;
+}) {
   const local = repoPath(pr.repo, prefs().reposRoot);
 
   async function withLocal(fn: (path: string) => Promise<void>, hud: string) {
@@ -130,6 +186,9 @@ function PRItem({ pr, ci }: { pr: PR; ci?: CiStatus }) {
       }
       title={`#${pr.number}`}
       subtitle={pr.title}
+      // Built-in search only sees title/subtitle/keywords — the repo is an
+      // accessory, so add it (owner/repo + short name) and the number here.
+      keywords={[pr.repo, shortRepo(pr.repo), `#${pr.number}`]}
       accessories={accessories}
       actions={
         <ActionPanel>
@@ -165,6 +224,12 @@ function PRItem({ pr, ci }: { pr: PR; ci?: CiStatus }) {
           />
           <Action.OpenInBrowser url={pr.url} />
           <Action.CopyToClipboard title="Copy PR URL" content={pr.url} />
+          <Action
+            title="Refresh"
+            icon={Icon.ArrowClockwise}
+            shortcut={{ modifiers: ["cmd"], key: "r" }}
+            onAction={onRefresh}
+          />
         </ActionPanel>
       }
     />
