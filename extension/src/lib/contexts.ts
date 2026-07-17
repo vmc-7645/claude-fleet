@@ -57,8 +57,19 @@ const SCHEMA = 1;
 const MAX_MESSAGE = 2000;
 const MAX_MESSAGES = 400;
 
+// The per-session caps alone only bound a record (~800KB worst case); across a
+// long-lived history they'd still multiply — 238 sessions could reach ~190MB in
+// theory, and this cache is read back with one JSON.parse, which is the same
+// shape of failure as the OOM in 6ae821e. So the index also has a *global* text
+// budget. Sessions are indexed newest-first, so if it's ever reached it's the
+// OLDEST sessions that fall back to metadata-only — they stay listed and
+// filterable by branch/repo, they just aren't full-text searchable.
+// (Locally this is nowhere near binding: 237 sessions = 3.6MB, ~15KB each.)
+const TEXT_BUDGET = 48 * 1024 * 1024;
+
 interface CacheEntry {
   mtimeMs: number;
+  truncated?: boolean; // indexed without message text (budget was spent)
   rec: ContextRecord;
 }
 
@@ -96,10 +107,14 @@ function isUserTurn(content: unknown): boolean {
   return false;
 }
 
+// `withText: false` still yields a fully-formed record (branch, repo, title,
+// turns) — it just skips the message bodies, so the row lists and filters
+// normally and only free-text search can't reach it.
 function parse(
   path: string,
   sessionId: string,
   mtimeMs: number,
+  withText: boolean,
 ): ContextRecord {
   const rec: ContextRecord = {
     sessionId,
@@ -148,8 +163,10 @@ function parse(
 
     if (row.type === "user") {
       const msg = row.message as { content?: unknown } | undefined;
+      // Turns are counted even when text is skipped — the row still reports it.
       if (msg && isUserTurn(msg.content)) {
         rec.turns++;
+        if (!withText) return;
         const t = textOf(msg.content);
         if (t && rec.messages.length < MAX_MESSAGES) {
           rec.messages.push({ role: "u", text: t.slice(0, MAX_MESSAGE) });
@@ -162,6 +179,7 @@ function parse(
         { content?: unknown; model?: string } | undefined;
       if (!msg) return;
       if (typeof msg.model === "string") rec.model = msg.model;
+      if (!withText) return;
       const t = textOf(msg.content);
       if (t && rec.messages.length < MAX_MESSAGES) {
         rec.messages.push({ role: "a", text: t.slice(0, MAX_MESSAGE) });
@@ -170,6 +188,12 @@ function parse(
   });
 
   return rec;
+}
+
+function textBytes(rec: ContextRecord): number {
+  let n = 0;
+  for (const m of rec.messages) n += m.text.length;
+  return n;
 }
 
 function readCache(): CacheFile {
@@ -231,24 +255,38 @@ export function buildIndex(): ContextRecord[] {
   const next: Record<string, CacheEntry> = {};
   const out: ContextRecord[] = [];
   let dirty = false;
+  let budget = TEXT_BUDGET;
 
+  // stat() everything up front so parsing runs newest-first: the text budget is
+  // then spent on the sessions you're most likely to be looking for.
+  const files: { path: string; mtimeMs: number }[] = [];
   for (const path of transcriptPaths()) {
-    let mtimeMs: number;
     try {
-      mtimeMs = statSync(path).mtimeMs;
+      files.push({ path, mtimeMs: statSync(path).mtimeMs });
     } catch {
-      continue;
+      continue; // vanished between readdir and stat
     }
+  }
+  files.sort((a, b) => b.mtimeMs - a.mtimeMs);
+
+  for (const { path, mtimeMs } of files) {
     const sessionId = basename(path).replace(/\.jsonl$/, "");
     const hit = cache.entries[path];
     let rec: ContextRecord;
-    if (hit && hit.mtimeMs === mtimeMs) {
+    let truncated: boolean;
+    // A cached record that was truncated is re-parsed once budget frees up, so
+    // a session doesn't stay text-less forever after one crowded build.
+    if (hit && hit.mtimeMs === mtimeMs && !(hit.truncated && budget > 0)) {
       rec = hit.rec;
+      truncated = Boolean(hit.truncated);
     } else {
-      rec = parse(path, sessionId, mtimeMs);
+      const withText = budget > 0;
+      rec = parse(path, sessionId, mtimeMs, withText);
+      truncated = !withText;
       dirty = true;
     }
-    next[path] = { mtimeMs, rec };
+    budget -= textBytes(rec);
+    next[path] = { mtimeMs, rec, truncated };
     // A session with no cwd never started work — nothing to resume or show.
     if (rec.root) out.push(rec);
   }
