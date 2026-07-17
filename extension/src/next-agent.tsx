@@ -17,7 +17,7 @@ export default async function Command() {
   // derives as "working" and is excluded; the tab matcher also refuses to focus
   // a working agent's tab when the target isn't working (same-repo agents).
   const RANK: Record<string, number> = { waiting: 0, done: 1, idle: 2 };
-  const { active } = loadAgents();
+  const { active } = loadAgents({ activeOnly: true });
   const next = active
     .filter((a) => a.state !== "working")
     .sort(
@@ -31,12 +31,10 @@ export default async function Command() {
     return;
   }
   await closeMainWindow();
-  const ok = await focusOrRaise(next)
-    .then(() => true)
-    .catch(() => false);
+  const ok = await focusOrRaise(next).catch(() => false);
   await showHUD(
     ok
       ? `→ ${next.repo}${next.title ? ` — ${next.title}` : ""}`
-      : "Tab not found",
+      : `Raised terminal — no exact tab for ${next.repo}`,
   );
 }

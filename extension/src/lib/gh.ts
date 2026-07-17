@@ -46,7 +46,7 @@ export async function searchMyPRs(): Promise<PR[]> {
     "--author=@me",
     "--state=open",
     "--limit",
-    "50",
+    "1000",
     "--sort",
     "updated",
     "--json",
@@ -63,7 +63,7 @@ export async function searchReviewRequests(): Promise<PR[]> {
     "--review-requested=@me",
     "--state=open",
     "--limit",
-    "50",
+    "1000",
     "--sort",
     "updated",
     "--json",
@@ -76,55 +76,79 @@ export async function searchReviewRequests(): Promise<PR[]> {
 // (gh failed / offline) — the two must not look alike.
 export type CiStatus = "pass" | "fail" | "pending" | "none" | "unknown";
 
-interface RollupCheck {
-  conclusion?: string;
-  state?: string;
-  status?: string;
+// Key a CI result by repo + number (PRs from different repos can share a number).
+export function ciKey(repo: string, number: number): string {
+  return `${repo}#${number}`;
 }
 
-// CI rollup for a single PR. One gh call per PR (fetched in parallel by the UI).
-export async function prCiStatus(
-  repo: string,
-  number: number,
-): Promise<CiStatus> {
+// Map a GraphQL statusCheckRollup.state to our CiStatus. `null` node = the alias
+// couldn't resolve (repo/PR gone) → unknown; a resolved PR with no rollup = none.
+function rollupToCi(node: unknown): CiStatus {
+  const pr = (node as { pullRequest?: unknown } | null)?.pullRequest as
+    | {
+        commits?: {
+          nodes?: {
+            commit?: { statusCheckRollup?: { state?: string } | null };
+          }[];
+        };
+      }
+    | null
+    | undefined;
+  if (pr == null) return "unknown"; // repo/PR didn't resolve
+  const state =
+    pr.commits?.nodes?.[0]?.commit?.statusCheckRollup?.state?.toUpperCase();
+  if (!state) return "none"; // resolved, but genuinely no checks
+  if (state === "SUCCESS") return "pass";
+  if (state === "FAILURE" || state === "ERROR") return "fail";
+  if (state === "PENDING" || state === "EXPECTED") return "pending";
+  return "unknown";
+}
+
+// CI rollup for MANY PRs in ONE `gh api graphql` call — replaces one `gh`
+// subprocess per PR (up to N parallel process spawns). Keyed by ciKey(). gh
+// exits non-zero if any single alias errors, but still writes the full partial
+// JSON to stdout (Node attaches it to the thrown error's `.stdout`), so a few
+// gone/renamed PRs just map to "unknown" without failing the batch.
+export async function prCiStatuses(
+  prs: { repo: string; number: number }[],
+): Promise<Map<string, CiStatus>> {
+  const out = new Map<string, CiStatus>();
+  if (prs.length === 0) return out;
+
+  const fields = prs
+    .map((pr, i) => {
+      const [owner, name = ""] = pr.repo.split("/");
+      return `p${i}: repository(owner: ${JSON.stringify(owner)}, name: ${JSON.stringify(
+        name,
+      )}) { pullRequest(number: ${pr.number}) { commits(last: 1) { nodes { commit { statusCheckRollup { state } } } } } }`;
+    })
+    .join("\n");
+  const query = `query {\n${fields}\n}`;
+
+  let raw = "";
   try {
-    const out = await run("gh", [
-      "pr",
-      "view",
-      String(number),
-      "-R",
-      repo,
-      "--json",
-      "statusCheckRollup",
-    ]);
-    const rollup = ((JSON.parse(out) as { statusCheckRollup?: RollupCheck[] })
-      .statusCheckRollup || []) as RollupCheck[];
-    if (rollup.length === 0) return "none";
-    let pending = false;
-    for (const c of rollup) {
-      const concl = (c.conclusion || "").toUpperCase();
-      const state = (c.state || "").toUpperCase();
-      const status = (c.status || "").toUpperCase();
-      const failed =
-        [
-          "FAILURE",
-          "TIMED_OUT",
-          "CANCELLED",
-          "ACTION_REQUIRED",
-          "STARTUP_FAILURE",
-          "ERROR",
-        ].includes(concl) || ["FAILURE", "ERROR"].includes(state);
-      if (failed) return "fail";
-      if (
-        ["IN_PROGRESS", "QUEUED", "PENDING", "WAITING"].includes(status) ||
-        state === "PENDING"
-      )
-        pending = true;
+    raw = await run("gh", ["api", "graphql", "-f", `query=${query}`]);
+  } catch (e) {
+    // Partial errors still deliver the full JSON on stdout; use it if present.
+    const stdout = (e as { stdout?: string }).stdout;
+    if (typeof stdout === "string" && stdout.includes('"data"')) raw = stdout;
+    else {
+      for (const pr of prs) out.set(ciKey(pr.repo, pr.number), "unknown");
+      return out;
     }
-    return pending ? "pending" : "pass";
-  } catch {
-    return "unknown"; // couldn't fetch — distinct from a PR with no checks
   }
+
+  let data: Record<string, unknown> = {};
+  try {
+    data = (JSON.parse(raw) as { data?: Record<string, unknown> }).data || {};
+  } catch {
+    for (const pr of prs) out.set(ciKey(pr.repo, pr.number), "unknown");
+    return out;
+  }
+  prs.forEach((pr, i) => {
+    out.set(ciKey(pr.repo, pr.number), rollupToCi(data[`p${i}`]));
+  });
+  return out;
 }
 
 export interface Issue {

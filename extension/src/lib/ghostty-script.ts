@@ -64,6 +64,27 @@ export const ENUMERATE = [
   "end tell",
 ].join("\n");
 
+// Count terminal surfaces (tabs; a single-tab window with no tab group = 1) and
+// return just the number. Used as the ⌘T/⌘N readiness poll — far lighter than
+// enumerating every window/tab title.
+export const COUNT_SURFACES = [
+  'tell application "System Events"',
+  '  tell process "Ghostty"',
+  "    set n to 0",
+  "    repeat with wi from 1 to (count of windows)",
+  "      set w to window wi",
+  ...findTabGroup("w"),
+  "      if tg is missing value then",
+  "        set n to n + 1",
+  "      else",
+  "        set n to n + (count of radio buttons of tg)",
+  "      end if",
+  "    end repeat",
+  "    return n",
+  "  end tell",
+  "end tell",
+].join("\n");
+
 // Press Ghostty's Dock tile — the reliable way to switch Spaces to its main
 // window (activate/AXRaise do not cross Spaces).
 export function dockPressScript(): string[] {

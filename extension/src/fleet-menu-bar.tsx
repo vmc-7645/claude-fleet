@@ -36,7 +36,7 @@ function label(a: Agent): string {
 export default function Command() {
   let active: Agent[] = [];
   try {
-    active = loadAgents().active;
+    active = loadAgents({ activeOnly: true }).active;
   } catch {
     active = [];
   }

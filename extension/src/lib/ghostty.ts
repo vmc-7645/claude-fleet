@@ -16,6 +16,7 @@ import { prefs } from "./prefs";
 import { GWindow, chooseTargetWindow } from "./tabmatch";
 import {
   ENUMERATE,
+  COUNT_SURFACES,
   raiseWindowScript,
   focusScript,
   dockPressScript,
@@ -107,7 +108,9 @@ export async function focusWindowTab(
   } catch {
     return false;
   }
-  return true;
+  // Report whether the retry actually brought Ghostty forward, rather than
+  // claiming success unconditionally — the caller's HUD depends on it.
+  return await ghosttyFrontmost();
 }
 
 // Is Ghostty running at all? (A cold app needs a launch, not a keystroke.)
@@ -165,27 +168,44 @@ function countSurfaces(ws: GWindow[]): number {
   return ws.reduce((n, w) => n + Math.max(w.tabs.length, 1), 0);
 }
 
+// Same count, but via a lightweight count-only AppleScript instead of a full
+// window/tab enumeration — used for the readiness poll, which runs repeatedly.
+async function liveSurfaceCount(): Promise<number> {
+  try {
+    return parseInt((await runAppleScript(COUNT_SURFACES)).trim(), 10) || 0;
+  } catch {
+    return 0;
+  }
+}
+
 // Send ⌘T (or ⌘N) and wait for the new surface to actually materialize before we
 // type into it — the reliable, observable readiness signal (Ghostty exposes no
 // terminal text). If the keystroke was dropped (no new surface within ~2s), retry
-// it once. `before` is the surface count taken just before the keystroke.
-async function openSurface(key: "t" | "n", before: number): Promise<void> {
+// it once. `before` is the surface count taken just before the keystroke;
+// `prefix` (e.g. the window raise) runs once, folded into the first keystroke's
+// AppleScript so it's one process spawn, not two.
+async function openSurface(
+  key: "t" | "n",
+  before: number,
+  prefix: string[] = [],
+): Promise<void> {
   for (let attempt = 0; attempt < 2; attempt++) {
     await runAppleScript(
       [
+        ...(attempt === 0 ? prefix : []),
         'tell application "Ghostty" to activate',
         "delay 0.2",
         `tell application "System Events" to keystroke "${key}" using {command down}`,
       ].join("\n"),
     );
     for (let i = 0; i < 12; i++) {
-      if (countSurfaces(await enumerateGhostty()) > before) return;
+      if ((await liveSurfaceCount()) > before) return;
       await sleep(150);
     }
     // Timed out. Re-check ONCE before retrying: the surface may have just
     // appeared (heavy machine / AX lag), and firing a second ⌘T/⌘N would open a
     // stray tab/window. Only retry if it genuinely didn't open.
-    if (countSurfaces(await enumerateGhostty()) > before) return;
+    if ((await liveSurfaceCount()) > before) return;
   }
 }
 
@@ -233,16 +253,13 @@ export async function openGhosttyTab(
   }
 
   // Bias into the window already hosting this project (else the frontmost one),
-  // raise it so ⌘T lands there, then open the tab and type the command.
+  // raise it so ⌘T lands there, then open the tab and type the command. The raise
+  // is folded into openSurface's first keystroke (one osascript, not two).
   const repo = basename(cwd);
   const target = chooseTargetWindow(windows, repo);
-  if (target) {
-    await runAppleScript(
-      raiseWindowScript(target.index, target.fs || target.index !== 1).join(
-        "\n",
-      ),
-    );
-  }
-  await openSurface("t", countSurfaces(windows));
+  const prefix = target
+    ? raiseWindowScript(target.index, target.fs || target.index !== 1)
+    : [];
+  await openSurface("t", countSurfaces(windows), prefix);
   await typeCommand(typed);
 }
