@@ -17,7 +17,9 @@ import { openInEditor } from "./lib/claude";
 import { prefs } from "./lib/prefs";
 
 export default function Command() {
-  const [skills, setSkills] = useState<Skill[]>(listSkills());
+  // Lazy initializer: scan the skills dir once on mount, not on every render
+  // (React discards a non-lazy initial value but still evaluates it each render).
+  const [skills, setSkills] = useState<Skill[]>(() => listSkills());
   const { push } = useNavigation();
   const reload = () => setSkills(listSkills());
 
