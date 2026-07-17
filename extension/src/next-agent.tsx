@@ -17,7 +17,7 @@ export default async function Command() {
   // derives as "working" and is excluded; the tab matcher also refuses to focus
   // a working agent's tab when the target isn't working (same-repo agents).
   const RANK: Record<string, number> = { waiting: 0, done: 1, idle: 2 };
-  const { active } = loadAgents();
+  const { active } = loadAgents({ activeOnly: true });
   const next = active
     .filter((a) => a.state !== "working")
     .sort(
