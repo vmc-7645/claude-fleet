@@ -1,7 +1,6 @@
 // My PRs — cross-repo list of your open PRs with CI status; each row → Review in
-// Claude / Check out & work / Resume PR agent. The list is cached (instant open,
-// background revalidate), CI is fetched for every PR in one batched call, and a
-// repo Scope dropdown / repo-name search narrow it. SPEC §5.2.
+// Claude / Check out & work / Resume PR agent. Cached list, batched CI, and a
+// repo Scope dropdown / repo-name search come from ./lib/pr-ui. SPEC §5.2.
 
 import {
   List,
@@ -14,62 +13,25 @@ import {
   showHUD,
   closeMainWindow,
 } from "@raycast/api";
-import { useCachedPromise } from "@raycast/utils";
-import { useEffect, useMemo, useState } from "react";
-import { searchMyPRs, prCiStatuses, ciKey, PR, CiStatus } from "./lib/gh";
+import { useState } from "react";
+import { searchMyPRs, PR, CiStatus } from "./lib/gh";
 import { reviewPR, checkoutAndWork, resumeFromPr } from "./lib/claude";
 import { repoPath } from "./lib/repos";
 import { prefs } from "./lib/prefs";
-
-function shortRepo(repo: string): string {
-  return repo.split("/").pop() || repo;
-}
+import {
+  usePRList,
+  RepoScopeDropdown,
+  ciAccessory,
+  prKeywords,
+  ciKey,
+} from "./lib/pr-ui";
 
 export default function Command() {
   const [scope, setScope] = useState("all");
-
-  const {
-    data: prs = [],
-    isLoading,
-    revalidate,
-  } = useCachedPromise(searchMyPRs, [], {
-    initialData: [] as PR[],
-    keepPreviousData: true,
-    onError: (e) => {
-      showToast({
-        style: Toast.Style.Failure,
-        title: "Failed to load PRs",
-        message: String(e),
-      });
-    },
-  });
-
-  // CI status for every PR in ONE batched gh call, refreshed whenever the list
-  // changes (CI is volatile, so it's fetched fresh rather than persisted).
-  const [ci, setCi] = useState<Map<string, CiStatus>>(new Map());
-  useEffect(() => {
-    if (prs.length === 0) return;
-    let cancelled = false;
-    prCiStatuses(prs)
-      .then((m) => {
-        if (!cancelled) setCi(m);
-      })
-      .catch(() => {
-        /* CI is best-effort; the list still works without it */
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [prs]);
-
-  const repos = useMemo(() => {
-    const n = new Map<string, number>();
-    for (const p of prs) n.set(p.repo, (n.get(p.repo) || 0) + 1);
-    return [...n.entries()].sort(
-      (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
-    );
-  }, [prs]);
-
+  const { prs, ci, isLoading, revalidate, repos } = usePRList(
+    searchMyPRs,
+    "Failed to load PRs",
+  );
   const shown = scope === "all" ? prs : prs.filter((p) => p.repo === scope);
 
   return (
@@ -77,19 +39,7 @@ export default function Command() {
       isLoading={isLoading}
       searchBarPlaceholder="Search by repo, #number, or title…"
       searchBarAccessory={
-        <List.Dropdown tooltip="Repo" value={scope} onChange={setScope}>
-          <List.Dropdown.Item icon={Icon.List} title="All Repos" value="all" />
-          <List.Dropdown.Section title="Repo">
-            {repos.map(([repo, count]) => (
-              <List.Dropdown.Item
-                key={repo}
-                icon={Icon.Folder}
-                title={`${repo} (${count})`}
-                value={repo}
-              />
-            ))}
-          </List.Dropdown.Section>
-        </List.Dropdown>
+        <RepoScopeDropdown scope={scope} onChange={setScope} repos={repos} />
       }
     >
       {!isLoading && shown.length === 0 && (
@@ -109,36 +59,6 @@ export default function Command() {
       ))}
     </List>
   );
-}
-
-function ciAccessory(ci?: CiStatus): List.Item.Accessory | undefined {
-  switch (ci) {
-    case "pass":
-      return {
-        icon: { source: Icon.CheckCircle, tintColor: Color.Green },
-        tooltip: "checks passing",
-      };
-    case "fail":
-      return {
-        icon: { source: Icon.XMarkCircle, tintColor: Color.Red },
-        tooltip: "checks failing",
-      };
-    case "pending":
-      return {
-        icon: { source: Icon.Clock, tintColor: Color.Yellow },
-        tooltip: "checks running",
-      };
-    case "unknown":
-      return {
-        icon: {
-          source: Icon.QuestionMarkCircle,
-          tintColor: Color.SecondaryText,
-        },
-        tooltip: "checks status unavailable",
-      };
-    default:
-      return undefined; // "none" → no accessory (PR genuinely has no checks)
-  }
 }
 
 function PRItem({
@@ -186,9 +106,7 @@ function PRItem({
       }
       title={`#${pr.number}`}
       subtitle={pr.title}
-      // Built-in search only sees title/subtitle/keywords — the repo is an
-      // accessory, so add it (owner/repo + short name) and the number here.
-      keywords={[pr.repo, shortRepo(pr.repo), `#${pr.number}`]}
+      keywords={prKeywords(pr)}
       accessories={accessories}
       actions={
         <ActionPanel>

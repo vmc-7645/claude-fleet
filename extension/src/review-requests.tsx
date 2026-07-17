@@ -1,7 +1,7 @@
 // PRs to Review — cross-repo list of PRs where someone requested YOUR review.
 // Primary action hands the PR to `claude /review`, cloning the repo on demand
-// if you don't have it locally. Cached list, one batched CI call, and a repo
-// Scope dropdown / repo-name search. SPEC §5.2 (review side).
+// if you don't have it locally. Cached list, batched CI, and a repo Scope
+// dropdown / repo-name search come from ./lib/pr-ui. SPEC §5.2 (review side).
 
 import {
   List,
@@ -9,71 +9,28 @@ import {
   Action,
   Icon,
   Color,
-  showToast,
-  Toast,
   showHUD,
   closeMainWindow,
 } from "@raycast/api";
-import { useCachedPromise } from "@raycast/utils";
-import { useEffect, useMemo, useState } from "react";
-import {
-  searchReviewRequests,
-  prCiStatuses,
-  ciKey,
-  PR,
-  CiStatus,
-} from "./lib/gh";
+import { useState } from "react";
+import { searchReviewRequests, PR, CiStatus } from "./lib/gh";
 import { reviewPR } from "./lib/claude";
 import { resolveRepoPath } from "./lib/repos";
 import { prefs } from "./lib/prefs";
-
-function shortRepo(repo: string): string {
-  return repo.split("/").pop() || repo;
-}
+import {
+  usePRList,
+  RepoScopeDropdown,
+  ciAccessory,
+  prKeywords,
+  ciKey,
+} from "./lib/pr-ui";
 
 export default function Command() {
   const [scope, setScope] = useState("all");
-
-  const {
-    data: prs = [],
-    isLoading,
-    revalidate,
-  } = useCachedPromise(searchReviewRequests, [], {
-    initialData: [] as PR[],
-    keepPreviousData: true,
-    onError: (e) => {
-      showToast({
-        style: Toast.Style.Failure,
-        title: "Failed to load review requests",
-        message: String(e),
-      });
-    },
-  });
-
-  const [ci, setCi] = useState<Map<string, CiStatus>>(new Map());
-  useEffect(() => {
-    if (prs.length === 0) return;
-    let cancelled = false;
-    prCiStatuses(prs)
-      .then((m) => {
-        if (!cancelled) setCi(m);
-      })
-      .catch(() => {
-        /* CI is best-effort */
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [prs]);
-
-  const repos = useMemo(() => {
-    const n = new Map<string, number>();
-    for (const p of prs) n.set(p.repo, (n.get(p.repo) || 0) + 1);
-    return [...n.entries()].sort(
-      (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
-    );
-  }, [prs]);
-
+  const { prs, ci, isLoading, revalidate, repos } = usePRList(
+    searchReviewRequests,
+    "Failed to load review requests",
+  );
   const shown = scope === "all" ? prs : prs.filter((p) => p.repo === scope);
 
   return (
@@ -81,19 +38,7 @@ export default function Command() {
       isLoading={isLoading}
       searchBarPlaceholder="Search by repo, author, #number, or title…"
       searchBarAccessory={
-        <List.Dropdown tooltip="Repo" value={scope} onChange={setScope}>
-          <List.Dropdown.Item icon={Icon.List} title="All Repos" value="all" />
-          <List.Dropdown.Section title="Repo">
-            {repos.map(([repo, count]) => (
-              <List.Dropdown.Item
-                key={repo}
-                icon={Icon.Folder}
-                title={`${repo} (${count})`}
-                value={repo}
-              />
-            ))}
-          </List.Dropdown.Section>
-        </List.Dropdown>
+        <RepoScopeDropdown scope={scope} onChange={setScope} repos={repos} />
       }
     >
       {!isLoading && shown.length === 0 && (
@@ -113,36 +58,6 @@ export default function Command() {
       ))}
     </List>
   );
-}
-
-function ciAccessory(ci?: CiStatus): List.Item.Accessory | undefined {
-  switch (ci) {
-    case "pass":
-      return {
-        icon: { source: Icon.CheckCircle, tintColor: Color.Green },
-        tooltip: "checks passing",
-      };
-    case "fail":
-      return {
-        icon: { source: Icon.XMarkCircle, tintColor: Color.Red },
-        tooltip: "checks failing",
-      };
-    case "pending":
-      return {
-        icon: { source: Icon.Clock, tintColor: Color.Yellow },
-        tooltip: "checks running",
-      };
-    case "unknown":
-      return {
-        icon: {
-          source: Icon.QuestionMarkCircle,
-          tintColor: Color.SecondaryText,
-        },
-        tooltip: "checks status unavailable",
-      };
-    default:
-      return undefined;
-  }
 }
 
 function PRItem({
@@ -188,14 +103,7 @@ function PRItem({
       }
       title={`#${pr.number}`}
       subtitle={pr.title}
-      // Built-in search sees title/subtitle/keywords only — add repo (owner/repo
-      // + short name), the number, and the author so all are searchable.
-      keywords={[
-        pr.repo,
-        shortRepo(pr.repo),
-        `#${pr.number}`,
-        ...(pr.author ? [pr.author] : []),
-      ]}
+      keywords={prKeywords(pr)}
       accessories={accessories}
       actions={
         <ActionPanel>
