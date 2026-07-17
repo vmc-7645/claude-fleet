@@ -47,6 +47,14 @@ else
   fi
 fi
 
+# When CLAUDE_WT_NO_OPEN is set, the caller (the Raycast extension) opens the tab
+# itself so it can pick the window by project affinity — we just create the
+# worktree and report its path on a stable, parseable line.
+if [ -n "${CLAUDE_WT_NO_OPEN:-}" ]; then
+  printf 'CLAUDE_WT_DIR=%s\n' "$wt_dir"
+  exit 0
+fi
+
 # Open the worktree in a new Ghostty tab and start claude. Ghostty has no CLI to
 # open a tab on macOS, so we drive the app: focus it, send the new-tab keystroke,
 # then type the command. (First run may prompt for Accessibility permission.)
