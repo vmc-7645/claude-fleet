@@ -150,18 +150,27 @@ export async function reviewPR(
   await openTerminalTab(repoPath, `claude ${shq(`/review ${prNumber}`)}`);
 }
 
-// Create (or reuse) the worktree for `branch` WITHOUT opening a tab, and return
-// its path. We open the tab ourselves (openTerminalTab) so Spawn/Checkout get the
-// same project-affinity window targeting as every other action — the ⌘T recipe
-// lives in exactly one place (ghostty.ts) instead of being duplicated in bash.
-async function makeWorktree(repoPath: string, branch: string): Promise<string> {
-  const out = await run("claude-worktree", [branch], {
-    cwd: repoPath,
-    env: { CLAUDE_WT_NO_OPEN: "1" },
-  });
+// Create (or reuse) the worktree for `branch`. The NEW helper honors
+// CLAUDE_WT_NO_OPEN — it skips opening a tab and prints `CLAUDE_WT_DIR=<path>`,
+// which we return so the caller opens the tab itself (project-affinity window
+// targeting, the ⌘T recipe living only in ghostty.ts).
+//
+// Backward-compat: an OLD installed helper (~/.local/bin, not re-run through
+// helpers/install.sh) ignores CLAUDE_WT_NO_OPEN and opens the tab ITSELF. So we
+// also pass CLAUDE_WT_PROMPT — the old helper uses it to start `claude <task>`
+// as before — and return null to signal "already opened, nothing more to do".
+// (Without this, dropping CLAUDE_WT_PROMPT made the old helper launch a bare
+// `claude` with no prompt.)
+async function makeWorktree(
+  repoPath: string,
+  branch: string,
+  task?: string,
+): Promise<string | null> {
+  const env: Record<string, string> = { CLAUDE_WT_NO_OPEN: "1" };
+  if (task) env.CLAUDE_WT_PROMPT = task;
+  const out = await run("claude-worktree", [branch], { cwd: repoPath, env });
   const m = out.match(/^CLAUDE_WT_DIR=(.+)$/m);
-  if (!m) throw new Error("claude-worktree did not report a worktree path");
-  return m[1].trim();
+  return m ? m[1].trim() : null; // null = old helper already opened the tab
 }
 
 export async function spawnAgent(
@@ -169,8 +178,8 @@ export async function spawnAgent(
   branch: string,
   task?: string,
 ): Promise<void> {
-  const dir = await makeWorktree(repoPath, branch);
-  await openTerminalTab(dir, task ? `claude ${shq(task)}` : "claude");
+  const dir = await makeWorktree(repoPath, branch, task);
+  if (dir) await openTerminalTab(dir, task ? `claude ${shq(task)}` : "claude");
 }
 
 // Open claude-undo in a tab — it shows its own diff + confirmation (safer than a
@@ -252,10 +261,14 @@ export async function checkoutAndWork(
   if (!branch) throw new Error("could not resolve PR branch");
   const task = `Working on PR #${prNumber}: ${title}`;
 
-  // Open the agent in the branch's existing worktree, or a freshly-created one —
-  // either way through the affinity opener.
-  const dir =
-    (await worktreeForBranch(repoPath, branch)) ??
-    (await makeWorktree(repoPath, branch));
-  await openTerminalTab(dir, `claude ${shq(task)}`);
+  // Open the agent in the branch's existing worktree if it has one; otherwise
+  // create the worktree and open it — both through the affinity opener. A fresh
+  // worktree made by an OLD helper is already opened by the helper (dir === null).
+  const existing = await worktreeForBranch(repoPath, branch);
+  if (existing) {
+    await openTerminalTab(existing, `claude ${shq(task)}`);
+    return;
+  }
+  const dir = await makeWorktree(repoPath, branch, task);
+  if (dir) await openTerminalTab(dir, `claude ${shq(task)}`);
 }
