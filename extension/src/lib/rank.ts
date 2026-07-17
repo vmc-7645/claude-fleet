@@ -38,6 +38,7 @@ export function loadAgents(): { active: Agent[]; recent: Agent[] } {
 
     return {
       sessionId: s.sessionId,
+      transcriptPath: m?.path,
       cwd: s.cwd,
       repo: repoOf(s.cwd),
       title: fleet?.task || m?.title || s.name || repoOf(s.cwd),
@@ -59,6 +60,7 @@ export function loadAgents(): { active: Agent[]; recent: Agent[] } {
     if (!m.cwd) continue;
     recent.push({
       sessionId: m.sessionId,
+      transcriptPath: m.path,
       cwd: m.cwd,
       repo: repoOf(m.cwd),
       title: m.title || repoOf(m.cwd),
