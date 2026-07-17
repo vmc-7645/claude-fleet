@@ -10,7 +10,7 @@ const win = (index: number, titles: string[]): GWindow => ({
 
 describe("titleHasRepo", () => {
   it("matches repo:branch and repo — task titles", () => {
-    expect(titleHasRepo("💤 droyd2:docs/x — Fix all", "droyd2")).toBe(true);
+    expect(titleHasRepo("💤 myrepo:docs/x — Fix all", "myrepo")).toBe(true);
     expect(titleHasRepo("⚙️ myrepo — do things", "myrepo")).toBe(true);
   });
   it("matches a bare trailing repo (hook-less tab)", () => {
@@ -20,43 +20,43 @@ describe("titleHasRepo", () => {
     expect(titleHasRepo("🟢 myapp:main — x", "app")).toBe(false);
   });
   it("does not match an unrelated aiTitle", () => {
-    expect(titleHasRepo("✳ Order items 348, 340", "droyd2")).toBe(false);
+    expect(titleHasRepo("✳ Order items 348, 340", "myrepo")).toBe(false);
   });
 });
 
 describe("chooseTargetWindow", () => {
   it("returns null when there are no windows (caller opens a new one)", () => {
-    expect(chooseTargetWindow([], "droyd2")).toBeNull();
+    expect(chooseTargetWindow([], "myrepo")).toBeNull();
   });
 
   it("prefers the window already hosting the same project", () => {
     const w1 = win(1, ["💤 other:main — a"]);
-    const w2 = win(2, ["⚙️ droyd2:docs/x — b", "💤 droyd2:docs/y — c"]);
-    expect(chooseTargetWindow([w1, w2], "droyd2")?.index).toBe(2);
+    const w2 = win(2, ["⚙️ myrepo:docs/x — b", "💤 myrepo:docs/y — c"]);
+    expect(chooseTargetWindow([w1, w2], "myrepo")?.index).toBe(2);
   });
 
   it("falls back to the frontmost window when no project match", () => {
     const w1 = win(1, ["💤 other:main — a"]);
     const w2 = win(2, ["⚙️ nope:main — b"]);
-    expect(chooseTargetWindow([w1, w2], "droyd2")?.index).toBe(1);
+    expect(chooseTargetWindow([w1, w2], "myrepo")?.index).toBe(1);
   });
 
   it("picks the frontmost among several windows hosting the project", () => {
     const w1 = win(1, ["💤 unrelated:main — a"]);
-    const w2 = win(2, ["⚙️ droyd2:docs/x — b"]);
-    const w3 = win(3, ["💤 droyd2:docs/z — c"]);
-    expect(chooseTargetWindow([w1, w2, w3], "droyd2")?.index).toBe(2);
+    const w2 = win(2, ["⚙️ myrepo:docs/x — b"]);
+    const w3 = win(3, ["💤 myrepo:docs/z — c"]);
+    expect(chooseTargetWindow([w1, w2, w3], "myrepo")?.index).toBe(2);
   });
 
   it("matches the project via a single-tab window's own title (no tab bar)", () => {
     const w1 = win(1, ["💤 elsewhere:main — a"]);
     const bare: GWindow = {
       index: 2,
-      title: "💤 droyd2:docs/x — solo",
+      title: "💤 myrepo:docs/x — solo",
       fs: false,
       tabs: [],
     };
-    expect(chooseTargetWindow([w1, bare], "droyd2")?.index).toBe(2);
+    expect(chooseTargetWindow([w1, bare], "myrepo")?.index).toBe(2);
   });
 
   it("reuses the frontmost window when repo is empty", () => {
