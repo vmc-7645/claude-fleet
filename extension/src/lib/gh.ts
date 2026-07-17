@@ -142,7 +142,10 @@ interface RawIssue {
   repository?: { name?: string; nameWithOwner?: string };
 }
 
-// Cross-repo list of open issues you opened (excluding PRs).
+// Cross-repo list of open issues you opened (excluding PRs). The default gh
+// limit is 30; we ask for 1000 — the GitHub search API's hard ceiling — so a
+// heavy issue history isn't silently truncated (gh pages 100 at a time and stops
+// when results run out, so it's only a few calls in practice).
 export async function searchMyIssues(): Promise<Issue[]> {
   const out = await run("gh", [
     "search",
@@ -150,7 +153,7 @@ export async function searchMyIssues(): Promise<Issue[]> {
     "--author=@me",
     "--state=open",
     "--limit",
-    "50",
+    "1000",
     "--sort",
     "updated",
     "--json",
