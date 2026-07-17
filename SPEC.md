@@ -134,8 +134,14 @@ Actions: Resume · Fork · Focus Tab (live) · open in editor/folder · Delete.
   collapses when one repo dominates: locally **211 of 238 sessions are one repo**
   (59 distinct branches). Branch is the axis that actually discriminates.
 - **Query** = free text + `branch:` / `repo:` / `is:live` / `is:idle` / `state:`.
-  The Scope dropdown **injects the same tokens into the same parser**, so there
-  is one filter path. A bare `key:` mid-type is text, not a filter.
+  Keys are case-insensitive; a bare `key:` mid-type is text, not a filter.
+  Bare words are **ANDed** (each must appear; best hit is one message holding
+  all of them, scattered-across-the-session ranks lower) — `"quoted"` asks for a
+  literal phrase, and quoting is also how a value carries a space
+  (`repo:"My Project"`). The Scope dropdown **injects the same (quoted) tokens
+  into the same parser**, so there is one filter path.
+- **Delete deletes by path, never by session id** — ids are not unique across
+  project dirs (§6.5), and the operation is irreversible.
 - **`filtering={false}`** — the only list that owns its search (§6.5), since
   Raycast's built-in filtering only sees title/subtitle. The scan is in-memory
   over the prebuilt index (~5ms/238), so it's synchronous and **unthrottled**.
@@ -217,8 +223,16 @@ gone are dropped. Locally: **0.6s cold / 13ms warm / 4.1MB over 238 sessions**.
 - **Text** = `user`/`assistant` text blocks only, capped per message and per
   session. Transcripts are ~**4.5% human-readable text** (7.9MB of 177MB); the
   rest is tool results and file dumps, so the cap bounds the index cheaply.
+- **A session id does NOT identify a transcript.** The same id can exist under
+  two project dirs (verified locally: one 1.3MB file and a 119-byte one share an
+  id), so resolving an id by scanning dirs — as `history.ts`'s
+  `deleteTranscript` does — can hit the wrong file. A record therefore carries
+  its own `path` (the cache key already knew it), and delete uses that. Rows key
+  off the path too, since ids can collide.
 - **Liveness is never indexed** — history is not live. `is:live` / `state:` come
-  from §6.1 at render time, merged onto the record by `sessionId`.
+  from §6.1 at render time, merged onto the record by `sessionId`, and narrowed
+  through the shared `liveState()` allowlist so the hook's raw string can't
+  become a bogus `AgentState` (as §6.1a).
 - **Why not extend `TranscriptMeta` (§6.2)?** The menu bar reaches
   `readTranscripts()` every 60s via `loadAgents()`; hanging ~8MB of message text
   off that shape re-introduces the worker OOM fixed in `6ae821e`. Search pays its
