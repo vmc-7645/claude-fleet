@@ -27,7 +27,7 @@ import {
 import { searchContexts } from "./lib/context-query";
 import { readActiveSessions } from "./lib/sessions";
 import { readFleetEntry } from "./lib/fleet";
-import { listWorktrees } from "./lib/worktrees";
+import { Worktree, listWorktrees } from "./lib/worktrees";
 import { deleteTranscript } from "./lib/history";
 import { prefs } from "./lib/prefs";
 import { Agent } from "./lib/types";
@@ -50,11 +50,11 @@ function timeAgo(ms: number): string {
   return `${Math.floor(h / 24)}d`;
 }
 
-// What the index knows, plus what only live/git can say.
+// What the index knows, plus the live state merged on at load. Worktree facts
+// are NOT folded in here — they're joined at render (see `wts`), so a refresh
+// that rebuilds rows can't drop them.
 interface Row extends ContextRecord {
   orphaned: boolean;
-  merged?: boolean;
-  isMain?: boolean;
 }
 
 function rowIcon(r: Row): Image.ImageLike {
@@ -79,6 +79,7 @@ function toAgent(r: Row): Agent {
 
 export default function Command() {
   const [rows, setRows] = useState<Row[]>([]);
+  const [wts, setWts] = useState<Map<string, Worktree>>(new Map());
   const [text, setText] = useState("");
   const [scope, setScope] = useState("all");
   const [isLoading, setIsLoading] = useState(true);
@@ -119,18 +120,12 @@ export default function Command() {
   useEffect(refresh, []);
 
   // Second phase, like My PRs: the list is usable off the index alone; git only
-  // decides the 🍂 merged tag, and shells out per repo, so it lands late.
+  // decides the 🍂 merged tag, and shells out per repo, so it lands late. It's
+  // kept in its own state and joined by path at render — folding it into `rows`
+  // would mean any later refresh() (⌘R, Rebuild Index) silently dropped it.
   useEffect(() => {
     listWorktrees(prefs().reposRoot)
-      .then((wts) => {
-        const byPath = new Map(wts.map((w) => [w.path, w]));
-        setRows((prev) =>
-          prev.map((r) => {
-            const w = byPath.get(r.root);
-            return w ? { ...r, merged: w.merged, isMain: w.isMain } : r;
-          }),
-        );
-      })
+      .then((list) => setWts(new Map(list.map((w) => [w.path, w]))))
       .catch(() => {
         // No repos configured / git unavailable — the index alone still works.
       });
@@ -234,6 +229,7 @@ export default function Command() {
           <ContextItem
             key={m.rec.sessionId}
             row={m.rec as Row}
+            wt={wts.get(m.rec.root)}
             snippet={m.snippet}
             {...shared}
           />
@@ -245,13 +241,14 @@ export default function Command() {
 
 function ContextItem(props: {
   row: Row;
+  wt?: Worktree; // joined by path at render, not folded into the row
   snippet: string;
   onRefresh: () => void;
   onRebuild: () => Promise<void>;
   showDetail: boolean;
   toggleDetail: () => void;
 }) {
-  const { row, snippet, onRefresh, onRebuild, showDetail, toggleDetail } =
+  const { row, wt, snippet, onRefresh, onRebuild, showDetail, toggleDetail } =
     props;
   const p = prefs();
   const agent = toAgent(row);
@@ -261,7 +258,7 @@ function ContextItem(props: {
     accessories.push({
       tag: {
         value: row.branch,
-        color: row.merged
+        color: wt?.merged
           ? Color.Yellow
           : row.branch === "main" || row.branch === "master"
             ? Color.Green
@@ -315,14 +312,19 @@ function ContextItem(props: {
           </List.Item.Detail.Metadata.TagList>
           <List.Item.Detail.Metadata.Label
             title="Worktree"
+            // Orphaned first — it's known from the index alone. The rest needs
+            // git, so "—" means "not known yet / not under your repos root",
+            // never "not a worktree".
             text={
-              row.isMain
-                ? "main checkout"
-                : row.merged
-                  ? "🍂 merged — safe to remove"
-                  : row.orphaned
-                    ? "⚠️ directory is gone"
-                    : "worktree"
+              row.orphaned
+                ? "⚠️ directory is gone"
+                : wt?.isMain
+                  ? "main checkout"
+                  : wt?.merged
+                    ? "🍂 merged — safe to remove"
+                    : wt
+                      ? "worktree"
+                      : "—"
             }
           />
           {row.live && (
