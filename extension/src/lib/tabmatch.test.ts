@@ -168,4 +168,45 @@ describe("chooseTab", () => {
     const done = cand("✳ Review the parser fix and merge", { tab: 2 });
     expect(chooseTab(id, [working, done])?.tab).toBe(2);
   });
+
+  it("falls back to the unique repo tab when the branch drifted (stale title)", () => {
+    // Agent's live branch changed since the hook titled the tab, and the task
+    // text doesn't agree — so repo:branch and repo+task both miss (score 0). The
+    // repo is unique among tabs, so focus should still find it.
+    const id: AgentTab = {
+      repo: "multi-window",
+      branch: "agent/open-perf",
+      task: "some unrelated ai title",
+      state: "working",
+    };
+    const mine = cand("⚙️ multi-window:main — Jumping tabs isn't workin", {
+      tab: 6,
+    });
+    const other = cand("💤 droyd2:fix/x — Review please", { tab: 1 });
+    expect(chooseTab(id, [other, mine])?.tab).toBe(6);
+  });
+
+  it("disambiguates a branch-drift fallback among same-repo tabs by state emoji", () => {
+    const id: AgentTab = {
+      repo: "droyd2",
+      branch: "some/drifted-branch",
+      task: "no agreement",
+      state: "working",
+    };
+    const idle = cand("💤 droyd2:fix/x — a", { tab: 1 });
+    const working = cand("⚙️ droyd2:fix/x — b", { tab: 2 });
+    expect(chooseTab(id, [idle, working])?.tab).toBe(2); // ⚙️ matches working
+  });
+
+  it("refuses to guess when several same-repo tabs remain ambiguous", () => {
+    const id: AgentTab = {
+      repo: "droyd2",
+      branch: "some/drifted-branch",
+      task: "no agreement",
+      state: "idle",
+    };
+    const a = cand("💤 droyd2:fix/x — a", { tab: 1 });
+    const b = cand("💤 droyd2:fix/y — b", { tab: 2 });
+    expect(chooseTab(id, [a, b])).toBeNull(); // two idle droyd2 tabs → don't guess
+  });
 });
