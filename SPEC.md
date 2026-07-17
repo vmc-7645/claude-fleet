@@ -212,21 +212,30 @@ into a temp worktree) before opening the agent.
 See preference schema in §12.
 
 ## 8. `→ Claude` actions & open-a-tab robustness
-All spawn/resume/review actions open a Ghostty tab running a command. Harden this
-single point of failure via one shared helper **`claude-open-tab <dir> <cmd>`**
-(used by the extension *and* the existing shell tools, so it's fixed in one place):
-1. **Ensure a target window:** if Ghostty has **no window** (or isn't running),
-   `open -na Ghostty.app` and wait for a window; else `activate`.
+All spawn/resume/review actions open a Ghostty tab running a command. This is
+centralized in the extension's Ghostty layer (`extension/src/lib/ghostty.ts`,
+`openGhosttyTab`); `helpers/bin/claude-worktree` uses the same ⌘T + typed-command
+recipe for the shell path. Steps:
+1. **Choose the window (project affinity):** enumerate Ghostty's windows/tabs and
+   bias HARD against a fresh window (`chooseTargetWindow`): open into a window that
+   already hosts the same project (matched off `<repo>` in its tab titles), else
+   the frontmost / most-recently-used window. Raise that window (AXMain + AXRaise;
+   Dock-press to switch Spaces for a fullscreen or background target) so the ⌘T
+   lands in it. Only when there are **no** windows do we open a new one.
 2. **New tab:** send ⌘T (Ghostty `new_tab`).
-3. **Wait for shell readiness:** delay = pref `tabOpenDelay` (default 0.7s), with
-   a longer retry; optionally poll for prompt readiness.
+3. **Wait for shell readiness:** delay = pref `tabOpenDelay` (default 0.7s). Too
+   short under load and the keystrokes are dropped and the agent never starts —
+   the "tab opens in the right folder but claude doesn't run" bug.
 4. **Type + Return:** `cd <dir> && <cmd>`.
-5. **Fallback mode (pref `tabOpenMode = window`):** skip AppleScript entirely and
-   use `open -na Ghostty.app --args --working-directory=<dir> -e '<cmd>'` — a new
-   **window**, but robust (no keystroke/timing/Accessibility dependency).
+5. **New-window path (`tabOpenMode = window`, or no window to reuse):** send ⌘N
+   (Ghostty `new_window`), then type as in 3–4. NOTE: on macOS a running Ghostty
+   is single-instance, so `open -na Ghostty.app --args -e '<cmd>'` is dropped (the
+   window opens but the command never runs) — ⌘N is the only reliable new-window
+   mechanism. `open -a Ghostty.app` is used only to cold-launch Ghostty when it
+   isn't running (its initial window is then the target — no ⌘N needed).
 - **Resume:** `claude --resume <id>` from cwd. **Fork:** `--fork-session`.
   **Review:** `claude "/review <n>"`. **Raise:** `osascript … activate`.
-- Requires Accessibility (already granted); the window fallback does not.
+- Requires Accessibility (already granted).
 
 ## 9. History performance & caching
 - Enumerate `~/.claude/projects/*/*.jsonl`; sort by mtime.

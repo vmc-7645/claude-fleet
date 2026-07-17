@@ -84,6 +84,57 @@ function includesToken(
   }
 }
 
+// A Ghostty window and its tabs, as read from the AX tree (ghostty.ts fills
+// these; the pure affinity pick lives here so it's unit-testable).
+export interface GTab {
+  index: number; // 1-based radio-button index in the tab group
+  title: string;
+}
+export interface GWindow {
+  index: number; // 1-based; window 1 is frontmost (System Events z-order)
+  title: string;
+  fs: boolean; // native fullscreen (its own Space)
+  tabs: GTab[]; // empty for a single-tab window (no AXTabGroup)
+}
+
+// Every title a window shows (its own title plus each tab's), for affinity.
+function windowTitles(w: GWindow): string[] {
+  return [w.title, ...w.tabs.map((t) => t.title)];
+}
+
+// Pick the window a new `repo` agent should open in, biasing HARD against a
+// fresh window: prefer a window already hosting the same project, else the
+// frontmost window (window 1 — most recently used), so existing windows are
+// always reused. null only when there are no windows, which the caller turns
+// into a new window. Ties resolve to the frontmost (lowest index) match.
+export function chooseTargetWindow(
+  windows: GWindow[],
+  repo: string,
+): GWindow | null {
+  if (windows.length === 0) return null;
+  if (repo) {
+    const sameProject = windows.filter((w) =>
+      windowTitles(w).some((t) => titleHasRepo(t, repo)),
+    );
+    if (sameProject.length) return sameProject[0]; // sorted frontmost-first
+  }
+  return windows[0]; // frontmost / most recently used
+}
+
+// Does a Ghostty window/tab title belong to `repo`? The tab-status hook renders
+// the repo as "<repo>:<branch>" or "<repo> — <task>"; a hook-less tab may end in
+// the bare repo. Used to group a new agent into a window that already hosts the
+// same project (window affinity), so it must be boundary-safe (repo "app" must
+// not match "myapp:main"). Reuses the same token logic as matching.
+export function titleHasRepo(title: string, repo: string): boolean {
+  if (!repo) return false;
+  return (
+    includesToken(title, `${repo}:`) ||
+    includesToken(title, `${repo} `) ||
+    (title.endsWith(repo) && boundaryBefore(title, title.length - repo.length))
+  );
+}
+
 // How strongly a Ghostty window/tab title identifies this agent. 0 = no match;
 // higher = more specific. Callers pick the highest-scoring title.
 export function tabMatchScore(a: AgentTab, title: string): number {

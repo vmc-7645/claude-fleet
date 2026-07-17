@@ -63,7 +63,7 @@ on run argv
   delay 0.25
   tell application "System Events"
     keystroke "t" using {command down}
-    delay 0.45
+    delay 0.7
     keystroke theCmd
     key code 36
   end tell

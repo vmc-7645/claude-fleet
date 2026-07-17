@@ -5,6 +5,7 @@
 
 import { runAppleScript } from "@raycast/utils";
 import { prefs } from "./prefs";
+import { openGhosttyTab } from "./ghostty";
 
 export type TermId = "ghostty" | "iterm" | "terminal";
 
@@ -40,21 +41,6 @@ export function asStr(s: string): string {
   return '"' + s.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
 }
 
-// Ghostty has no CLI to open a tab, so drive the app: focus it, ⌘T, type the
-// command, Return. (First run may prompt for Accessibility.)
-function ghosttyScript(typed: string): string {
-  return [
-    'tell application "Ghostty" to activate',
-    "delay 0.2",
-    'tell application "System Events"',
-    '  keystroke "t" using {command down}',
-    "  delay 0.6",
-    `  keystroke ${asStr(typed)}`,
-    "  key code 36",
-    "end tell",
-  ].join("\n");
-}
-
 // iTerm2 has first-class scripting: new tab (or window) + write text.
 function itermScript(typed: string): string {
   return [
@@ -87,20 +73,22 @@ function terminalScript(typed: string): string {
   ].join("\n");
 }
 
-// Open `command` in a new terminal tab, cd'd into `cwd`.
+// Open `command` in a new terminal tab, cd'd into `cwd`. Ghostty gets the
+// window-aware opener (project affinity + robust new-window fallback, ghostty.ts);
+// iTerm2/Terminal use their own scripting.
 export async function openTerminalTab(
   cwd: string,
   command: string,
 ): Promise<void> {
-  const typed = `cd ${shq(cwd)} && ${command}`;
   const t = terminalApp();
-  const script =
-    t === "iterm"
-      ? itermScript(typed)
-      : t === "terminal"
-        ? terminalScript(typed)
-        : ghosttyScript(typed);
-  await runAppleScript(script);
+  if (t === "ghostty") {
+    await openGhosttyTab(cwd, command);
+    return;
+  }
+  const typed = `cd ${shq(cwd)} && ${command}`;
+  await runAppleScript(
+    t === "iterm" ? itermScript(typed) : terminalScript(typed),
+  );
 }
 
 // Bring the terminal app to the front (fallback when we can't target a tab).
