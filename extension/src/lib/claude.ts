@@ -150,15 +150,27 @@ export async function reviewPR(
   await openTerminalTab(repoPath, `claude ${shq(`/review ${prNumber}`)}`);
 }
 
+// Create (or reuse) the worktree for `branch` WITHOUT opening a tab, and return
+// its path. We open the tab ourselves (openTerminalTab) so Spawn/Checkout get the
+// same project-affinity window targeting as every other action — the ⌘T recipe
+// lives in exactly one place (ghostty.ts) instead of being duplicated in bash.
+async function makeWorktree(repoPath: string, branch: string): Promise<string> {
+  const out = await run("claude-worktree", [branch], {
+    cwd: repoPath,
+    env: { CLAUDE_WT_NO_OPEN: "1" },
+  });
+  const m = out.match(/^CLAUDE_WT_DIR=(.+)$/m);
+  if (!m) throw new Error("claude-worktree did not report a worktree path");
+  return m[1].trim();
+}
+
 export async function spawnAgent(
   repoPath: string,
   branch: string,
   task?: string,
 ): Promise<void> {
-  await run("claude-worktree", [branch], {
-    cwd: repoPath,
-    env: task ? { CLAUDE_WT_PROMPT: task } : undefined,
-  });
+  const dir = await makeWorktree(repoPath, branch);
+  await openTerminalTab(dir, task ? `claude ${shq(task)}` : "claude");
 }
 
 // Open claude-undo in a tab — it shows its own diff + confirmation (safer than a
@@ -240,14 +252,10 @@ export async function checkoutAndWork(
   if (!branch) throw new Error("could not resolve PR branch");
   const task = `Working on PR #${prNumber}: ${title}`;
 
-  const existing = await worktreeForBranch(repoPath, branch);
-  if (existing) {
-    // Branch already checked out — open the agent in that worktree.
-    await openTerminalTab(existing, `claude ${shq(task)}`);
-    return;
-  }
-  await run("claude-worktree", [branch], {
-    cwd: repoPath,
-    env: { CLAUDE_WT_PROMPT: task },
-  });
+  // Open the agent in the branch's existing worktree, or a freshly-created one —
+  // either way through the affinity opener.
+  const dir =
+    (await worktreeForBranch(repoPath, branch)) ??
+    (await makeWorktree(repoPath, branch));
+  await openTerminalTab(dir, `claude ${shq(task)}`);
 }
