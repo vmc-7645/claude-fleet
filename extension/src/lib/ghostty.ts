@@ -120,18 +120,29 @@ async function ghosttyRunning(): Promise<boolean> {
   }
 }
 
-// Type a command into the frontmost Ghostty surface after a readiness delay.
-// Ghostty renders the terminal on the GPU and exposes NO text via Accessibility,
-// so we can't detect the shell prompt directly — openDelay() is the settle for
-// shell init; openSurface() below covers the observable half (the tab existing).
+// Deliver a command into the frontmost Ghostty surface after a readiness delay.
+// We PASTE it rather than `keystroke` it: AppleScript keystroke mistypes
+// backslashes, so shq's `'\''` apostrophe-escaping breaks any command whose path
+// or prompt contains a single quote (e.g. a task from an issue title with an
+// apostrophe) — the shell ends up on a `quote>` continuation. A clipboard paste
+// lands the exact bytes, so the escaping survives. We save and restore the
+// user's clipboard around it. (Ghostty renders on the GPU and exposes no
+// terminal text via Accessibility, so openDelay() is the shell-init settle and
+// openSurface() covers the observable half — the tab existing.)
 async function typeCommand(typed: string): Promise<void> {
   await runAppleScript(
     [
+      'set savedClip to ""',
+      "try",
+      "  set savedClip to (the clipboard as text)",
+      "end try",
+      `set the clipboard to ${asStr(typed)}`,
       "delay " + openDelay(),
-      'tell application "System Events"',
-      `  keystroke ${asStr(typed)}`,
-      "  key code 36",
-      "end tell",
+      'tell application "System Events" to keystroke "v" using {command down}',
+      "delay 0.15",
+      'tell application "System Events" to key code 36',
+      "delay 0.1",
+      "set the clipboard to savedClip",
     ].join("\n"),
   );
 }
