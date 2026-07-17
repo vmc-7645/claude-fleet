@@ -12,10 +12,16 @@ function repoOf(cwd: string): string {
   return basename(cwd || "") || "?";
 }
 
-export function loadAgents(): { active: Agent[]; recent: Agent[] } {
+// `activeOnly`: callers that render only live agents (menu bar, Next Waiting
+// Agent) skip the whole-history sweep — parse just the active transcripts and
+// don't build the `recent` list.
+export function loadAgents(opts?: { activeOnly?: boolean }): {
+  active: Agent[];
+  recent: Agent[];
+} {
   const sessions = readActiveSessions();
   const activeIds = new Set(sessions.map((s) => s.sessionId));
-  const metas = readTranscripts();
+  const metas = readTranscripts(opts?.activeOnly ? activeIds : undefined);
 
   const active: Agent[] = sessions.map((s) => {
     const m = metas.get(s.sessionId);
@@ -55,7 +61,9 @@ export function loadAgents(): { active: Agent[]; recent: Agent[] } {
   });
 
   const recent: Agent[] = [];
-  for (const m of metas.values()) {
+  // In activeOnly mode `metas` holds only active sessions, so there's nothing to
+  // build here — skip the loop entirely.
+  for (const m of opts?.activeOnly ? [] : metas.values()) {
     if (activeIds.has(m.sessionId)) continue;
     if (!m.cwd) continue;
     recent.push({
