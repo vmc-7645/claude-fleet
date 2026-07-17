@@ -1,6 +1,7 @@
 // PRs to Review — cross-repo list of PRs where someone requested YOUR review.
 // Primary action hands the PR to `claude /review`, cloning the repo on demand
-// if you don't have it locally. SPEC §5.2 (review side).
+// if you don't have it locally. Cached list, one batched CI call, and a repo
+// Scope dropdown / repo-name search. SPEC §5.2 (review side).
 
 import {
   List,
@@ -13,54 +14,102 @@ import {
   showHUD,
   closeMainWindow,
 } from "@raycast/api";
-import { useEffect, useState } from "react";
-import { searchReviewRequests, prCiStatus, PR, CiStatus } from "./lib/gh";
+import { useCachedPromise } from "@raycast/utils";
+import { useEffect, useMemo, useState } from "react";
+import {
+  searchReviewRequests,
+  prCiStatuses,
+  ciKey,
+  PR,
+  CiStatus,
+} from "./lib/gh";
 import { reviewPR } from "./lib/claude";
 import { resolveRepoPath } from "./lib/repos";
 import { prefs } from "./lib/prefs";
 
-export default function Command() {
-  const [prs, setPrs] = useState<PR[]>([]);
-  const [ci, setCi] = useState<Record<string, CiStatus>>({});
-  const [isLoading, setIsLoading] = useState(true);
+function shortRepo(repo: string): string {
+  return repo.split("/").pop() || repo;
+}
 
+export default function Command() {
+  const [scope, setScope] = useState("all");
+
+  const {
+    data: prs = [],
+    isLoading,
+    revalidate,
+  } = useCachedPromise(searchReviewRequests, [], {
+    initialData: [] as PR[],
+    keepPreviousData: true,
+    onError: (e) => {
+      showToast({
+        style: Toast.Style.Failure,
+        title: "Failed to load review requests",
+        message: String(e),
+      });
+    },
+  });
+
+  const [ci, setCi] = useState<Map<string, CiStatus>>(new Map());
   useEffect(() => {
-    (async () => {
-      try {
-        const list = await searchReviewRequests();
-        setPrs(list);
-        setIsLoading(false);
-        const entries = await Promise.all(
-          list.map(
-            async (p) => [p.url, await prCiStatus(p.repo, p.number)] as const,
-          ),
-        );
-        setCi(Object.fromEntries(entries));
-      } catch (e) {
-        await showToast({
-          style: Toast.Style.Failure,
-          title: "Failed to load review requests",
-          message: String(e),
-        });
-        setIsLoading(false);
-      }
-    })();
-  }, []);
+    if (prs.length === 0) return;
+    let cancelled = false;
+    prCiStatuses(prs)
+      .then((m) => {
+        if (!cancelled) setCi(m);
+      })
+      .catch(() => {
+        /* CI is best-effort */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [prs]);
+
+  const repos = useMemo(() => {
+    const n = new Map<string, number>();
+    for (const p of prs) n.set(p.repo, (n.get(p.repo) || 0) + 1);
+    return [...n.entries()].sort(
+      (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
+    );
+  }, [prs]);
+
+  const shown = scope === "all" ? prs : prs.filter((p) => p.repo === scope);
 
   return (
     <List
       isLoading={isLoading}
-      searchBarPlaceholder="Search PRs awaiting your review…"
+      searchBarPlaceholder="Search by repo, author, #number, or title…"
+      searchBarAccessory={
+        <List.Dropdown tooltip="Repo" value={scope} onChange={setScope}>
+          <List.Dropdown.Item icon={Icon.List} title="All Repos" value="all" />
+          <List.Dropdown.Section title="Repo">
+            {repos.map(([repo, count]) => (
+              <List.Dropdown.Item
+                key={repo}
+                icon={Icon.Folder}
+                title={`${repo} (${count})`}
+                value={repo}
+              />
+            ))}
+          </List.Dropdown.Section>
+        </List.Dropdown>
+      }
     >
-      {!isLoading && prs.length === 0 && (
+      {!isLoading && shown.length === 0 && (
         <List.EmptyView
           icon={{ source: Icon.Eye, tintColor: Color.Red }}
-          title="No PRs to review"
+          title={scope === "all" ? "No PRs to review" : "No PRs in this repo"}
           description="Nothing is waiting on your review right now."
         />
       )}
-      {prs.map((pr) => (
-        <PRItem key={pr.url} pr={pr} ci={ci[pr.url]} />
+      {shown.map((pr) => (
+        <PRItem
+          key={pr.url}
+          pr={pr}
+          ci={ci.get(ciKey(pr.repo, pr.number))}
+          onRefresh={revalidate}
+        />
       ))}
     </List>
   );
@@ -96,7 +145,15 @@ function ciAccessory(ci?: CiStatus): List.Item.Accessory | undefined {
   }
 }
 
-function PRItem({ pr, ci }: { pr: PR; ci?: CiStatus }) {
+function PRItem({
+  pr,
+  ci,
+  onRefresh,
+}: {
+  pr: PR;
+  ci?: CiStatus;
+  onRefresh: () => void;
+}) {
   const root = prefs().reposRoot;
 
   async function review() {
@@ -131,6 +188,14 @@ function PRItem({ pr, ci }: { pr: PR; ci?: CiStatus }) {
       }
       title={`#${pr.number}`}
       subtitle={pr.title}
+      // Built-in search sees title/subtitle/keywords only — add repo (owner/repo
+      // + short name), the number, and the author so all are searchable.
+      keywords={[
+        pr.repo,
+        shortRepo(pr.repo),
+        `#${pr.number}`,
+        ...(pr.author ? [pr.author] : []),
+      ]}
       accessories={accessories}
       actions={
         <ActionPanel>
@@ -141,6 +206,12 @@ function PRItem({ pr, ci }: { pr: PR; ci?: CiStatus }) {
           />
           <Action.OpenInBrowser url={pr.url} />
           <Action.CopyToClipboard title="Copy PR URL" content={pr.url} />
+          <Action
+            title="Refresh"
+            icon={Icon.ArrowClockwise}
+            shortcut={{ modifiers: ["cmd"], key: "r" }}
+            onAction={onRefresh}
+          />
         </ActionPanel>
       }
     />

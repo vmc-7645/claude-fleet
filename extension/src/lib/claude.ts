@@ -82,10 +82,12 @@ export async function focusAgentTab(agent: Agent): Promise<boolean> {
 }
 
 // Focus the agent's exact tab; fall back to just raising the terminal if no
-// match (or if the terminal isn't Ghostty).
-export async function focusOrRaise(agent: Agent): Promise<void> {
+// match (or if the terminal isn't Ghostty). Returns true only when an exact tab
+// was focused, so callers can tell the difference in their HUD.
+export async function focusOrRaise(agent: Agent): Promise<boolean> {
   const ok = await focusAgentTab(agent);
   if (!ok) await activateTerminalApp();
+  return ok;
 }
 
 // Close the agent's Ghostty tab (focus it, then ⌘W).

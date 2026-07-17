@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   findTabGroup,
   ENUMERATE,
+  COUNT_SURFACES,
   dockPressScript,
   raiseWindowScript,
   focusScript,
@@ -30,6 +31,18 @@ describe("ENUMERATE", () => {
     expect(/\btab\b/.test(ENUMERATE.replace(/tab group|tab bar/g, ""))).toBe(
       false,
     );
+  });
+});
+
+describe("COUNT_SURFACES", () => {
+  it("counts a single-tab window as 1 and otherwise sums radio buttons", () => {
+    expect(COUNT_SURFACES).toContain("set n to n + 1");
+    expect(COUNT_SURFACES).toContain("count of radio buttons of tg");
+    // Uses the same depth-0/1 nested tab-group search as enumeration.
+    expect(COUNT_SURFACES).toContain("UI elements of w");
+    // Returns just the number, not per-tab titles.
+    expect(COUNT_SURFACES).toContain("return n");
+    expect(COUNT_SURFACES).not.toContain("title of");
   });
 });
 
