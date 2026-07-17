@@ -44,6 +44,40 @@ export default function Command() {
   }, []);
 
   const repos = Array.from(new Set(wts.map((w) => w.repo)));
+  const mergedWts = wts.filter((w) => w.merged);
+
+  // Remove every merged (🍂) worktree in one confirmed sweep — the common
+  // "clean up after a batch of PRs merged" chore. Branches are kept; only the
+  // worktree dirs are removed. Reuses the same removeWorktree + merged detection
+  // as the per-item action.
+  async function pruneMerged() {
+    if (mergedWts.length === 0) return;
+    const ok = await confirmAlert({
+      title: `Prune ${mergedWts.length} merged worktree${mergedWts.length > 1 ? "s" : ""}?`,
+      message: `${mergedWts.map((w) => `• ${w.repo}: ${w.branch}`).join("\n")}\n\nDeletes the worktree directories (branches are kept).`,
+      primaryAction: { title: "Prune", style: Alert.ActionStyle.Destructive },
+    });
+    if (!ok) return;
+
+    const toast = await showToast({
+      style: Toast.Style.Animated,
+      title: `Pruning ${mergedWts.length} worktrees…`,
+    });
+    let removed = 0;
+    const failed: string[] = [];
+    for (const w of mergedWts) {
+      try {
+        await removeWorktree(w);
+        removed++;
+      } catch {
+        failed.push(`${w.repo}:${w.branch}`);
+      }
+    }
+    await load();
+    toast.style = failed.length ? Toast.Style.Failure : Toast.Style.Success;
+    toast.title = `Pruned ${removed} worktree${removed === 1 ? "" : "s"}`;
+    toast.message = failed.length ? `Failed: ${failed.join(", ")}` : undefined;
+  }
 
   return (
     <List isLoading={isLoading} searchBarPlaceholder="Search worktrees…">
@@ -59,7 +93,13 @@ export default function Command() {
           {wts
             .filter((w) => w.repo === repo)
             .map((w) => (
-              <WtItem key={w.path} wt={w} onChange={load} />
+              <WtItem
+                key={w.path}
+                wt={w}
+                onChange={load}
+                mergedCount={mergedWts.length}
+                onPrune={pruneMerged}
+              />
             ))}
         </List.Section>
       ))}
@@ -67,7 +107,17 @@ export default function Command() {
   );
 }
 
-function WtItem({ wt, onChange }: { wt: Worktree; onChange: () => void }) {
+function WtItem({
+  wt,
+  onChange,
+  mergedCount,
+  onPrune,
+}: {
+  wt: Worktree;
+  onChange: () => void;
+  mergedCount: number;
+  onPrune: () => void;
+}) {
   async function run(fn: () => Promise<void>, hud: string) {
     await closeMainWindow();
     try {
@@ -153,6 +203,17 @@ function WtItem({ wt, onChange }: { wt: Worktree; onChange: () => void }) {
               style={Action.Style.Destructive}
               onAction={remove}
             />
+          )}
+          {mergedCount > 0 && (
+            <ActionPanel.Section>
+              <Action
+                title={`Prune ${mergedCount} Merged Worktree${mergedCount > 1 ? "s" : ""}`}
+                icon={Icon.Leaf}
+                style={Action.Style.Destructive}
+                shortcut={{ modifiers: ["cmd", "shift"], key: "backspace" }}
+                onAction={onPrune}
+              />
+            </ActionPanel.Section>
           )}
         </ActionPanel>
       }
