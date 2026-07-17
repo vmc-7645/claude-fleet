@@ -207,8 +207,9 @@ into a temp worktree) before opening the agent.
 - **Single-repo commands** (Review PR, Spawn) use a **searchable repo Dropdown**
   pre-selected to the resolved default (§7.1) — type-to-filter, instant override.
 - **List commands** (My PRs, My Issues) default to a **cross-repo** view
-  (`gh search prs/issues --author=@me`) with the scope dropdown to narrow to one
-  repo. So browsing is inherently repo-correct (each row carries its repo).
+  (`gh search prs/issues --author=@me`); each row carries its repo, so browsing
+  is inherently repo-correct. **My Issues** additionally has a repo scope dropdown
+  + repo-name search (My PRs / PRs to Review don't yet — see §5.2).
 See preference schema in §12.
 
 ## 8. `→ Claude` actions & open-a-tab robustness
@@ -223,10 +224,15 @@ recipe for the shell path. Steps:
    Dock-press to switch Spaces for a fullscreen or background target) so the ⌘T
    lands in it. Only when there are **no** windows do we open a new one.
 2. **New tab:** send ⌘T (Ghostty `new_tab`).
-3. **Wait for shell readiness:** delay = pref `tabOpenDelay` (default 0.7s). Too
-   short under load and the keystrokes are dropped and the agent never starts —
-   the "tab opens in the right folder but claude doesn't run" bug.
-4. **Type + Return:** `cd <dir> && <cmd>`.
+3. **Settle:** delay = pref `tabOpenDelay` (default 0.3s) so ⌘V lands in the new
+   tab and the shell has cleared its bracketed-paste setup.
+4. **Deliver `cd <dir> && <cmd>` + Return by PASTE, not keystroke:** save the
+   clipboard, set it to the command, ⌘V, Return, restore the clipboard.
+   AppleScript `keystroke` mistypes backslashes, which broke shq's `'\''` quote-
+   escaping (any prompt with an apostrophe left the shell on a `quote>`); a paste
+   lands the exact bytes and the pty buffers them, so it's also load-robust (the
+   old keystroke path dropped chars — the "tab opens in the right folder but
+   claude doesn't run" bug).
 5. **New-window path (`tabOpenMode = window`, or no window to reuse):** send ⌘N
    (Ghostty `new_window`), then type as in 3–4. NOTE: on macOS a running Ghostty
    is single-instance, so `open -na Ghostty.app --args -e '<cmd>'` is dropped (the
@@ -267,9 +273,9 @@ Claude Code maintains `~/.claude/sessions/` itself (deletes files on exit), so
 | `includeGitHubRepos` | bool | `true` | picker GitHub fallback (`gh repo list`) |
 | _(last-used repo)_ | — | persisted, not a pref | resolution order §7.1 |
 | `editorCommand` | string | `code` (or `$EDITOR`) | Open-in-editor |
-| `primaryClick` | enum(raise,resume) | `raise` | Agents/Fleet |
+| `primaryClick` | enum(focus,resume) | `focus` | Agents/Fleet |
 | `tabOpenMode` | enum(tab,window) | `tab` | open-a-tab |
-| `tabOpenDelay` | number(s) | `0.7` | open-a-tab |
+| `tabOpenDelay` | number(s) | `0.3` | open-a-tab |
 | `pollInterval` | enum (Raycast-allowed) | lowest | Fleet menu bar |
 | `recentLimit` | number | `0` (all) | Agents/Recent |
 | `badgeMetric` | enum(needsYou,total) | `needsYou` | Fleet |

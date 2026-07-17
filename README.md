@@ -110,6 +110,8 @@ That's it — open Raycast and search **Claude Fleet**.
 - **Quick replies** — comma-separated canned follow-ups for the Quick Reply action.
 - **Editor command** — `code` / `cursor` / … for *Open in Editor* (must be on `PATH`).
 - **Repos directory** — override discovery root. Blank → `~/.config/claude-fleet/repos.env` → `~/Repos`.
+- **Open agents as** *(Ghostty)* — a new **tab** in the project's window (default) or a new **window**.
+- **Tab open delay** *(Ghostty)* — seconds to settle before the command is pasted in (default `0.3`).
 
 </details>
 
