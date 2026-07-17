@@ -179,7 +179,13 @@ export function deleteTranscriptAt(path: string): boolean {
   }
 }
 
-export function readTranscripts(): Map<string, TranscriptMeta> {
+// `onlyIds`: when given, parse ONLY transcripts whose session id is in the set
+// (still lists the dirs, but skips streaming every other file). Callers that
+// need just the live agents (menu bar, Next Waiting Agent) pass the active ids
+// so a big history isn't fully parsed every tick.
+export function readTranscripts(
+  onlyIds?: Set<string>,
+): Map<string, TranscriptMeta> {
   const out = new Map<string, TranscriptMeta>();
   let projectDirs: string[];
   try {
@@ -197,8 +203,9 @@ export function readTranscripts(): Map<string, TranscriptMeta> {
       continue;
     }
     for (const f of files) {
-      const full = join(dir, f);
       const sessionId = f.replace(/\.jsonl$/, "");
+      if (onlyIds && !onlyIds.has(sessionId)) continue; // skip non-active files
+      const full = join(dir, f);
       let mtimeMs: number;
       try {
         mtimeMs = statSync(full).mtimeMs;
