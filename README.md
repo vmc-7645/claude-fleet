@@ -31,13 +31,14 @@ a terminal to start work; start it from wherever you already are.
 
 ## Commands
 
-Fourteen commands, grouped by what you reach for.
+Fifteen commands, grouped by what you reach for.
 
 #### 🤖 Agents & fleet
 | Command | Mode | What it does |
 |---|---|---|
 | <img src="extension/assets/cmd/agents.svg" width="24" height="24" align="center"> **Agents** | list | Active (live) + Recent (history) console. Per agent: **Focus Tab** (jumps to the exact Ghostty tab), Resume, Fork, **Nudge** / **Quick Reply** (send a canned follow-up into its tab), **Close Tab**, Undo last turn, Stop, open in editor/folder. Detail pane (⌘I) shows the pending question + mode/state/diff. **Scope** dropdown (All / Active / Recent / per-repo). |
 | <img src="extension/assets/cmd/next-agent.svg" width="24" height="24" align="center"> **Next Waiting Agent** | hotkey | Focus the agent that's been waiting on you longest — hit it again to work through the backlog. **Opt-in:** off by default; enable it and assign a hotkey. |
+| <img src="extension/assets/cmd/contexts.svg" width="24" height="24" align="center"> **Contexts** | list | Search every past session by **what was said in it** — not just its title. Scope by **branch** (`branch:feat/x`), repo, or `is:live`; the dropdown shows a branch → count roster. Rows carry the branch, `+N` when the session spanned more, 🍂 merged, ⚠️ gone. Resume / Fork / Focus Tab from any hit. |
 | <img src="extension/assets/icon.png" width="24" height="24" align="center"> **Fleet** | menu bar | Needs-you count badge + roster; click an agent to focus its tab. Refreshes every minute. |
 
 #### 🔀 PRs, issues & worktrees
