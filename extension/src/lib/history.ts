@@ -85,7 +85,7 @@ function isUserTurn(message: unknown): boolean {
 // Transcripts reach tens of MB; readFileSync + split("\n") materializes the
 // whole file (plus a line array) at once, which overflows the menu-bar worker's
 // heap once the Raycast runtime's own baseline is loaded. SPEC §9.
-function eachLine(path: string, onLine: (line: string) => void): void {
+export function eachLine(path: string, onLine: (line: string) => void): void {
   const CHUNK = 1 << 18; // 256 KB
   let fd: number;
   try {
