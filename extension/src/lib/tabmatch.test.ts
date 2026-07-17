@@ -174,39 +174,37 @@ describe("chooseTab", () => {
     // text doesn't agree — so repo:branch and repo+task both miss (score 0). The
     // repo is unique among tabs, so focus should still find it.
     const id: AgentTab = {
-      repo: "multi-window",
-      branch: "agent/open-perf",
+      repo: "myrepo",
+      branch: "feature/renamed",
       task: "some unrelated ai title",
       state: "working",
     };
-    const mine = cand("⚙️ multi-window:main — Jumping tabs isn't workin", {
-      tab: 6,
-    });
-    const other = cand("💤 droyd2:fix/x — Review please", { tab: 1 });
+    const mine = cand("⚙️ myrepo:main — the current task here", { tab: 6 });
+    const other = cand("💤 otherrepo:fix/x — Review please", { tab: 1 });
     expect(chooseTab(id, [other, mine])?.tab).toBe(6);
   });
 
   it("disambiguates a branch-drift fallback among same-repo tabs by state emoji", () => {
     const id: AgentTab = {
-      repo: "droyd2",
+      repo: "myrepo",
       branch: "some/drifted-branch",
       task: "no agreement",
       state: "working",
     };
-    const idle = cand("💤 droyd2:fix/x — a", { tab: 1 });
-    const working = cand("⚙️ droyd2:fix/x — b", { tab: 2 });
+    const idle = cand("💤 myrepo:fix/x — a", { tab: 1 });
+    const working = cand("⚙️ myrepo:fix/x — b", { tab: 2 });
     expect(chooseTab(id, [idle, working])?.tab).toBe(2); // ⚙️ matches working
   });
 
   it("refuses to guess when several same-repo tabs remain ambiguous", () => {
     const id: AgentTab = {
-      repo: "droyd2",
+      repo: "myrepo",
       branch: "some/drifted-branch",
       task: "no agreement",
       state: "idle",
     };
-    const a = cand("💤 droyd2:fix/x — a", { tab: 1 });
-    const b = cand("💤 droyd2:fix/y — b", { tab: 2 });
-    expect(chooseTab(id, [a, b])).toBeNull(); // two idle droyd2 tabs → don't guess
+    const a = cand("💤 myrepo:fix/x — a", { tab: 1 });
+    const b = cand("💤 myrepo:fix/y — b", { tab: 2 });
+    expect(chooseTab(id, [a, b])).toBeNull(); // two idle myrepo tabs → don't guess
   });
 });
