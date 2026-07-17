@@ -1,6 +1,9 @@
 // My Issues — cross-repo list of issues you opened; start an agent on one.
 // Search matches the repo name (and #number) as well as the title, and a repo
-// Scope dropdown narrows to one repo. SPEC §5.7.
+// Scope dropdown narrows to one repo. The full list is cached and shown instantly
+// on open, then revalidated in the background (new issues appear, closed ones
+// drop) — so a large issue history stays fully searchable without the fetch wait.
+// SPEC §5.7.
 
 import {
   List,
@@ -13,7 +16,8 @@ import {
   showHUD,
   closeMainWindow,
 } from "@raycast/api";
-import { useEffect, useMemo, useState } from "react";
+import { useCachedPromise } from "@raycast/utils";
+import { useMemo, useState } from "react";
 import { searchMyIssues, Issue } from "./lib/gh";
 import { spawnAgent } from "./lib/claude";
 import { repoPath } from "./lib/repos";
@@ -25,25 +29,27 @@ function shortRepo(repo: string): string {
 }
 
 export default function Command() {
-  const [issues, setIssues] = useState<Issue[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [scope, setScope] = useState("all");
 
-  useEffect(() => {
-    (async () => {
-      try {
-        setIssues(await searchMyIssues());
-      } catch (e) {
-        await showToast({
-          style: Toast.Style.Failure,
-          title: "Failed to load issues",
-          message: String(e),
-        });
-      } finally {
-        setIsLoading(false);
-      }
-    })();
-  }, []);
+  // Stale-while-revalidate: the previous fetch is persisted and rendered
+  // instantly, while a fresh fetch runs in the background and replaces it (so
+  // the list reconciles — new issues in, closed issues out — on each open, plus
+  // ⌘R). `keepPreviousData` avoids a flash of empty while it revalidates.
+  const {
+    data: issues = [],
+    isLoading,
+    revalidate,
+  } = useCachedPromise(searchMyIssues, [], {
+    initialData: [] as Issue[],
+    keepPreviousData: true,
+    onError: (e) => {
+      showToast({
+        style: Toast.Style.Failure,
+        title: "Failed to load issues",
+        message: String(e),
+      });
+    },
+  });
 
   // Repos present, with a count each, most-issues first — labels the dropdown so
   // you can see where your issues actually are before scoping.
@@ -86,13 +92,19 @@ export default function Command() {
         />
       )}
       {shown.map((i) => (
-        <IssueItem key={i.url} issue={i} />
+        <IssueItem key={i.url} issue={i} onRefresh={revalidate} />
       ))}
     </List>
   );
 }
 
-function IssueItem({ issue }: { issue: Issue }) {
+function IssueItem({
+  issue,
+  onRefresh,
+}: {
+  issue: Issue;
+  onRefresh: () => void;
+}) {
   const local = repoPath(issue.repo, prefs().reposRoot);
 
   async function startAgent() {
@@ -136,6 +148,12 @@ function IssueItem({ issue }: { issue: Issue }) {
           />
           <Action.OpenInBrowser url={issue.url} />
           <Action.CopyToClipboard title="Copy Issue URL" content={issue.url} />
+          <Action
+            title="Refresh"
+            icon={Icon.ArrowClockwise}
+            shortcut={{ modifiers: ["cmd"], key: "r" }}
+            onAction={onRefresh}
+          />
         </ActionPanel>
       }
     />
