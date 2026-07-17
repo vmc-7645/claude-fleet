@@ -21,13 +21,15 @@ import {
   dockPressScript,
 } from "./ghostty-script";
 
-// Delay (seconds) after ⌘T/⌘N before typing, so the new shell is ready to
-// receive the command. Too short under load and the keystrokes are dropped and
-// the agent never starts — the classic "tab opens in the right dir but claude
-// doesn't run". Configurable via the tabOpenDelay pref (SPEC §8 step 3).
+// Delay (seconds) after ⌘T/⌘N before the command is delivered. Since we PASTE
+// the command (typeCommand) rather than keystroke it, the pty buffers the bytes
+// until the shell reads them — so this no longer has to cover full shell-init
+// (a keystroke-era concern); it's just a small settle so ⌘V lands in the new tab
+// and clears the shell's bracketed-paste setup. 0.3s tested reliable (paste
+// works even at 0.1s); configurable via the tabOpenDelay pref (SPEC §8 step 3).
 function openDelay(): number {
   const raw = Number(prefs().tabOpenDelay);
-  return Number.isFinite(raw) && raw > 0 ? raw : 0.7;
+  return Number.isFinite(raw) && raw > 0 ? raw : 0.3;
 }
 
 // Read Ghostty's windows and tabs. Retries a flaky System Events -10000 a few
