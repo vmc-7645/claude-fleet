@@ -47,6 +47,8 @@ async function branchOf(cwd: string): Promise<string> {
 }
 
 const quote = (s: string) => s.replace(/\n/g, "\n> ");
+const truncate = (s: string, n: number) =>
+  s.length > n ? s.slice(0, n).trimEnd() + "…" : s;
 
 // Build the handoff card. Compact by default; `full` adds the last few messages
 // and the full diff.
@@ -74,7 +76,12 @@ export async function buildHandoffCard(
   ];
 
   if (agent.question) {
-    out.push("", "**Pending question**", `> ${quote(agent.question)}`);
+    // It's a "pending question" only when the agent is actually waiting on you;
+    // otherwise it's just the last thing said. Trim hard in the compact card.
+    const label =
+      agent.state === "waiting" ? "Pending question" : "Last message";
+    const q = truncate(agent.question, opts.full ? 1200 : 280);
+    out.push("", `**${label}**`, `> ${quote(q)}`);
   }
 
   if (opts.full && agent.transcriptPath) {
