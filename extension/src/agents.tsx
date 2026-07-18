@@ -9,6 +9,7 @@ import {
   Color,
   Image,
   Form,
+  Clipboard,
   showToast,
   Toast,
   showHUD,
@@ -27,6 +28,7 @@ import { prefs } from "./lib/prefs";
 import { Agent } from "./lib/types";
 import { focusSupported } from "./lib/terminal";
 import { preflight, Issue } from "./lib/preflight";
+import { buildHandoffCard, shareGist } from "./lib/handoff";
 import {
   resumeAgent,
   forkAgent,
@@ -478,6 +480,61 @@ function AgentItem(props: {
     />
   );
 
+  // Handoff: a markdown snapshot of this agent's state, to paste anywhere or
+  // share as a secret gist. Read-only — it moves context, not the session.
+  async function copyHandoff(full: boolean) {
+    try {
+      await Clipboard.copy(await buildHandoffCard(agent, { full }));
+      await showHUD(full ? "Full handoff copied" : "Handoff card copied");
+    } catch (e) {
+      await showHUD(`❌ ${String(e).slice(0, 80)}`);
+    }
+  }
+  async function shareHandoffGist() {
+    const ok = await confirmAlert({
+      title: "Share handoff as a secret gist?",
+      message:
+        "The full card can include the pending question, recent messages, and the diff — which may contain sensitive content. The gist is unlisted, not private.",
+      primaryAction: { title: "Create Gist" },
+    });
+    if (!ok) return;
+    await showHUD("Creating gist…");
+    try {
+      const url = await shareGist(
+        await buildHandoffCard(agent, { full: true }),
+        `handoff-${agent.repo}.md`,
+      );
+      if (!url) throw new Error("no gist URL returned");
+      await Clipboard.copy(url);
+      await showHUD(`Gist URL copied · ${url}`);
+    } catch (e) {
+      await showHUD(`❌ ${String(e).slice(0, 80)}`);
+    }
+  }
+  const handoffSubmenu = (
+    <ActionPanel.Submenu
+      title="Hand Off"
+      icon={Icon.Upload}
+      shortcut={{ modifiers: ["cmd", "shift"], key: "h" }}
+    >
+      <Action
+        title="Copy Handoff Card"
+        icon={Icon.Clipboard}
+        onAction={() => copyHandoff(false)}
+      />
+      <Action
+        title="Copy Full Handoff (Messages + Diff)"
+        icon={Icon.Clipboard}
+        onAction={() => copyHandoff(true)}
+      />
+      <Action
+        title="Share as Secret Gist"
+        icon={Icon.Link}
+        onAction={shareHandoffGist}
+      />
+    </ActionPanel.Submenu>
+  );
+
   return (
     <List.Item
       id={agent.sessionId}
@@ -526,6 +583,7 @@ function AgentItem(props: {
                 resumeAction
               )}
               {forkAction}
+              {handoffSubmenu}
               {agent.state === "working" && (
                 <Action
                   title="Stop Agent"
@@ -547,6 +605,7 @@ function AgentItem(props: {
             <>
               {resumeAction}
               {forkAction}
+              {handoffSubmenu}
               <Action
                 title="Delete Session"
                 icon={Icon.Trash}
