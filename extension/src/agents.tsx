@@ -440,6 +440,17 @@ function AgentItem(props: {
       onAction={() => act(() => resumeAgent(agent), `Resuming ${agent.repo}`)}
     />
   );
+  // Fork = a new session that starts from a copy of this one's history and
+  // diverges (claude --resume … --fork-session). Works on a live agent too — it
+  // reads the transcript, so the original keeps running untouched.
+  const forkAction = (
+    <Action
+      title="Fork Session"
+      icon={Icon.Duplicate}
+      shortcut={{ modifiers: ["cmd", "shift"], key: "f" }}
+      onAction={() => act(() => forkAgent(agent), `Forking ${agent.repo}`)}
+    />
+  );
 
   return (
     <List.Item
@@ -487,6 +498,7 @@ function AgentItem(props: {
               ) : (
                 resumeAction
               )}
+              {forkAction}
               {agent.state === "working" && (
                 <Action
                   title="Stop Agent"
@@ -507,13 +519,7 @@ function AgentItem(props: {
           ) : (
             <>
               {resumeAction}
-              <Action
-                title="Fork Session"
-                icon={Icon.Duplicate}
-                onAction={() =>
-                  act(() => forkAgent(agent), `Forking ${agent.repo}`)
-                }
-              />
+              {forkAction}
               <Action
                 title="Delete Session"
                 icon={Icon.Trash}
