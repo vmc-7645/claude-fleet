@@ -154,6 +154,19 @@ macOS · a terminal — [Ghostty](https://ghostty.org) (default, and required fo
 Focus Tab / Nudge / Close Tab), iTerm2, or Apple Terminal · Claude Code ·
 [`gh`](https://cli.github.com) (My PRs / PRs to Review / My Issues) · `git` · `jq` (the `helpers/` hooks).
 
+## Publishing to the Raycast store
+
+It runs great as a local dev extension (`npm run dev`); this is what's left if you
+ever want it in the [Raycast store](https://developers.raycast.com/basics/publish-an-extension):
+
+- ✅ `categories`, `keywords`, `CHANGELOG.md`, icon, and required manifest fields are in place.
+- ⬜ **Screenshots** — add 3–6 to `extension/metadata/` (Raycast's `Export Screenshots`, 2000×1250).
+- ⬜ **Store submission** — `cd extension && npm run publish` opens a PR against
+  [`raycast/extensions`](https://github.com/raycast/extensions) for review.
+- ⚠️ **Caveat:** full functionality depends on the shell helpers (`helpers/install.sh`) and
+  Ghostty + Accessibility. The extension degrades gracefully without them, but store reviewers
+  will see reduced behavior unless that setup is documented in the store description.
+
 ## License
 
 [MIT](LICENSE). The Claude marks in `extension/assets/` are Anthropic's trademarks — see

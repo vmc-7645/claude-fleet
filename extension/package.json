@@ -6,6 +6,18 @@
   "icon": "icon.png",
   "author": "vmc-7645",
   "license": "MIT",
+  "categories": [
+    "Developer Tools",
+    "Productivity"
+  ],
+  "keywords": [
+    "claude",
+    "claude code",
+    "agents",
+    "ghostty",
+    "worktree",
+    "pull requests"
+  ],
   "preferences": [
     {
       "name": "terminalApp",
