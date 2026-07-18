@@ -183,6 +183,33 @@ export function deleteTranscriptAt(path: string): boolean {
 // (still lists the dirs, but skips streaming every other file). Callers that
 // need just the live agents (menu bar, Next Waiting Agent) pass the active ids
 // so a big history isn't fully parsed every tick.
+// The last `max` real user/assistant text messages from a transcript (for a
+// handoff summary). Skips tool-result rows and empties. Streams the file.
+export function recentMessages(
+  path: string,
+  max: number,
+): { role: "u" | "a"; text: string }[] {
+  const out: { role: "u" | "a"; text: string }[] = [];
+  eachLine(path, (line) => {
+    if (!line) return;
+    let row: Record<string, unknown>;
+    try {
+      row = JSON.parse(line);
+    } catch {
+      return;
+    }
+    const msg = row.message as { content?: unknown } | undefined;
+    if (row.type === "user" && isUserTurn(msg)) {
+      const t = assistantText(msg?.content);
+      if (t) out.push({ role: "u", text: t });
+    } else if (row.type === "assistant") {
+      const t = assistantText(msg?.content);
+      if (t) out.push({ role: "a", text: t });
+    }
+  });
+  return out.slice(-max);
+}
+
 export function readTranscripts(
   onlyIds?: Set<string>,
 ): Map<string, TranscriptMeta> {
