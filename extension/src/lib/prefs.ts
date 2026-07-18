@@ -8,6 +8,7 @@ export interface Prefs {
   quickReplies?: string;
   tabOpenMode?: "tab" | "window";
   tabOpenDelay?: string; // seconds; textfield, parsed to a number
+  stuckMinutes?: string; // minutes; a working agent stale this long is flagged
 }
 
 export function prefs(): Prefs {

@@ -268,7 +268,24 @@ function AgentItem(props: {
     ? `${agent.state} · ${timeAgo(agent.updatedAt)}`
     : `${timeAgo(agent.updatedAt)}${agent.turns ? ` · ${agent.turns}t` : ""}`;
 
+  // "Stuck": still marked working but no update in a while — likely hung, or on a
+  // very long operation. Heuristic (updatedAt can lag a legitimately busy agent),
+  // so it's a soft flag, and the threshold is tunable (default 20m).
+  const stuckMin = Number(p.stuckMinutes) > 0 ? Number(p.stuckMinutes) : 20;
+  const stuck =
+    agent.state === "working" &&
+    Date.now() - agent.updatedAt > stuckMin * 60_000;
+
   const accessories: List.Item.Accessory[] = [];
+  if (stuck) {
+    accessories.push({
+      tag: {
+        value: `⚠️ stalled ${timeAgo(agent.updatedAt)}`,
+        color: Color.Red,
+      },
+      tooltip: `Working but no update in ${timeAgo(agent.updatedAt)} — may be hung`,
+    });
+  }
   if (mode) accessories.push({ tag: { value: mode, color: Color.Purple } });
   if (agent.state === "waiting" && agent.stateReason) {
     accessories.push({

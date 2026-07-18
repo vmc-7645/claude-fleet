@@ -96,6 +96,14 @@
       "description": "Ghostty only. Seconds to wait after opening a tab/window before the command is pasted in. Default 0.3 is tuned for the paste path; raise it only if an agent occasionally opens in the right folder but doesn't start.",
       "default": "0.3",
       "required": false
+    },
+    {
+      "name": "stuckMinutes",
+      "type": "textfield",
+      "title": "Stalled agent threshold (min)",
+      "description": "Flag an agent that's still \"working\" but hasn't updated in this many minutes as possibly stuck/hung in the Agents list. Raise it if long builds trip it.",
+      "default": "20",
+      "required": false
     }
   ],
   "commands": [
