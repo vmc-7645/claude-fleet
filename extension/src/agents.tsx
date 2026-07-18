@@ -30,6 +30,7 @@ import { preflight, Issue } from "./lib/preflight";
 import {
   resumeAgent,
   forkAgent,
+  fullDiff,
   focusOrRaise,
   openUndo,
   stopAgent,
@@ -86,6 +87,7 @@ export default function Command() {
   const [recent, setRecent] = useState<Agent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showDetail, setShowDetail] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [scope, setScope] = useState("all");
   const [issues, setIssues] = useState<Issue[]>([]);
 
@@ -149,6 +151,7 @@ export default function Command() {
   const shared = {
     onRefresh: refresh,
     showDetail,
+    selectedId,
     toggleDetail: () => setShowDetail((v) => !v),
     cleanUp,
   };
@@ -157,6 +160,7 @@ export default function Command() {
     <List
       isLoading={isLoading}
       isShowingDetail={showDetail}
+      onSelectionChange={setSelectedId}
       searchBarPlaceholder="Search agents by repo or title…"
       searchBarAccessory={
         <List.Dropdown tooltip="Scope" value={scope} onChange={setScope}>
@@ -255,14 +259,34 @@ function AgentItem(props: {
   agent: Agent;
   onRefresh: () => void;
   showDetail: boolean;
+  selectedId: string | null;
   toggleDetail: () => void;
   cleanUp: () => Promise<void>;
 }) {
-  const { agent, onRefresh, showDetail, toggleDetail, cleanUp } = props;
+  const { agent, onRefresh, showDetail, selectedId, toggleDetail, cleanUp } =
+    props;
   const { push } = useNavigation();
   const mode = modeLabel(agent.mode);
   const p = prefs();
   const canTabs = focusSupported();
+
+  // Full diff for the detail pane — fetched lazily, and only for the SELECTED
+  // row (not every row) so it's one git call. Refetches as a working agent
+  // changes (keyed on updatedAt).
+  const [diffText, setDiffText] = useState<string>("");
+  useEffect(() => {
+    if (!showDetail || selectedId !== agent.sessionId || !agent.cwd) {
+      setDiffText("");
+      return;
+    }
+    let cancelled = false;
+    fullDiff(agent.cwd).then((d) => {
+      if (!cancelled) setDiffText(d);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [showDetail, selectedId, agent.sessionId, agent.cwd, agent.updatedAt]);
 
   const ageLabel = agent.live
     ? `${agent.state} · ${timeAgo(agent.updatedAt)}`
@@ -370,9 +394,11 @@ function AgentItem(props: {
     }
   }
 
-  const markdown = agent.question
-    ? `**Last message**\n\n${agent.question}`
-    : "_No message captured yet._";
+  const sections: string[] = [];
+  if (agent.question) sections.push(`**Last message**\n\n${agent.question}`);
+  if (diffText)
+    sections.push(`**Diff** (vs HEAD)\n\n\`\`\`diff\n${diffText}\n\`\`\``);
+  const markdown = sections.join("\n\n---\n\n") || "_No message captured yet._";
   const detail = (
     <List.Item.Detail
       markdown={markdown}
@@ -454,6 +480,7 @@ function AgentItem(props: {
 
   return (
     <List.Item
+      id={agent.sessionId}
       icon={agentIcon(agent)}
       title={agent.repo}
       subtitle={showDetail ? undefined : agent.title}

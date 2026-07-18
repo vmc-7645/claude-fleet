@@ -25,6 +25,22 @@ export async function forkAgent(a: Agent): Promise<void> {
   await openTerminalTab(a.cwd, `claude --resume ${a.sessionId} --fork-session`);
 }
 
+// The agent's working-tree changes vs HEAD, for the detail pane. Capped so a
+// huge diff can't bloat the pane; returns "" when there's nothing / not a repo.
+const MAX_DIFF = 20000;
+export async function fullDiff(cwd: string): Promise<string> {
+  if (!cwd) return "";
+  try {
+    const out = await run("git", ["-C", cwd, "diff", "HEAD"]);
+    if (!out.trim()) return "";
+    return out.length > MAX_DIFF
+      ? out.slice(0, MAX_DIFF) + "\n… (diff truncated)"
+      : out;
+  } catch {
+    return ""; // no HEAD / not a git repo / cwd gone
+  }
+}
+
 // The worktree's current branch — the strong, deterministic half of the match.
 async function branchOf(cwd: string): Promise<string> {
   try {
